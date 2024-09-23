@@ -231,8 +231,17 @@ success_tests! {
         name: equal_bool_let,
         file: "equal_bool_let.snek",
         expected: "true",
-    }
-
+    },
+    {
+        name: if_nested,
+        file: "if_nested.snek",
+        expected: "5",
+    },
+    {
+        name: if_let,
+        file: "if_let.snek",
+        expected: "5",
+    },
 }
 
 runtime_error_tests! {

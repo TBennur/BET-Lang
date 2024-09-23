@@ -150,7 +150,7 @@ fn parse_expr(s: &Sexp) -> Expr {
 
             // let expression
             // has the form let ((binding1), (binding2)) (in expression)
-            [Sexp::Atom(S(op)), Sexp::List(bindings), finially] if op == "let" => {
+            [Sexp::Atom(S(op)), Sexp::List(bindings), finally] if op == "let" => {
                 if bindings.len() == 0 {
                     panic!("Invalid")
                 } else {
@@ -165,7 +165,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                                 _ => panic!("Invalid"),
                             })
                             .collect(),
-                        Box::new(parse_expr(finially)),
+                        Box::new(parse_expr(finally)),
                     )
                 }
             }
@@ -512,7 +512,38 @@ fn compile_to_instrs(
             instructions_to_compile_let
         }
 
-        Expr::If(expr, expr1, expr2) => todo!(),
+        Expr::If(expr, expr1, expr2) => {
+            let mut instructions_to_compile_if: Vec<Instr> = vec![];
+            let mut if_cond_label_prefix = label_prefix.clone();
+            if_cond_label_prefix.push_str("_if_cond");
+            let mut if_left_label_prefix = label_prefix.clone();
+            if_left_label_prefix.push_str("_if_left");
+            let mut if_right_label_prefix = label_prefix.clone();
+            if_right_label_prefix.push_str("_if_right");
+            let mut if_finish_label_prefix = label_prefix.clone();
+            if_finish_label_prefix.push_str("_if_finish");
+ 
+            // Conditional Expression
+            let code_to_eval_expr = compile_to_instrs(expr, scope_bindings.clone(), rsp_offset, if_cond_label_prefix.clone());
+            instructions_to_compile_if.extend(code_to_eval_expr);
+            instructions_to_compile_if.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instructions_to_compile_if.push(Instr::JumpEqual(if_left_label_prefix.clone()));
+            
+            // Right Branch
+            let code_to_eval_expr2 = compile_to_instrs(expr2, scope_bindings.clone(), rsp_offset, if_right_label_prefix.clone());
+            instructions_to_compile_if.extend(code_to_eval_expr2);
+            instructions_to_compile_if.push(Instr::Jump(if_finish_label_prefix.clone()));
+
+            // Left Branch
+            instructions_to_compile_if.push(Instr::AddLabel(if_left_label_prefix.clone()));
+            let code_to_eval_expr1 = compile_to_instrs(expr1, scope_bindings.clone(), rsp_offset, if_left_label_prefix.clone());
+            instructions_to_compile_if.extend(code_to_eval_expr1);
+            
+            // Finish
+            instructions_to_compile_if.push(Instr::AddLabel(if_finish_label_prefix.clone()));
+
+            instructions_to_compile_if
+        },
         Expr::RepeatUntil(expr, expr1) => todo!(),
         Expr::Set(_, expr) => todo!(),
         Expr::Block(vec) => todo!(),
