@@ -29,7 +29,7 @@ success_tests! {
         expected: "-5",
     },
     
-    // Given Tests
+    // Provided Tests
     {
         name: false_val,
         file: "false_val.snek",
@@ -95,7 +95,32 @@ success_tests! {
         input: "0",
         expected: "1",
     },
-
+    {
+        name: true_val,
+        file: "true_val.snek",
+        expected: "true",
+    },
+    {
+        name: negative_one_val,
+        file: "negative_one_val.snek",
+        expected: "-1",
+    },
+    {
+        name: zero_val,
+        file: "zero_val.snek",
+        expected: "0",
+    },
+    {
+        name: one_val,
+        file: "one_val.snek",
+        expected: "1",
+    },
+    {
+        name: five_val,
+        file: "five_val.snek",
+        expected: "5",
+    },
+ 
 
 
 }

@@ -392,7 +392,10 @@ fn compile_to_instrs(
     match e {
         // immediate values
         Expr::Input => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))],
-        Expr::Boolean(_) => todo!(),
+        Expr::Boolean(b) => match b {
+            false => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
+            true => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1))]
+        },
         Expr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
 
         Expr::Id(identifier) => match scope_bindings.get(identifier) {
