@@ -112,7 +112,13 @@ fn parse_expr(s: &Sexp) -> Expr {
                             .into_iter()
                             .map(|element| match element {
                                 Sexp::List(binding) => match &binding[..] {
-                                    [Sexp::Atom(S(id)), e] => (id.to_string(), parse_expr(e)),
+                                    [Sexp::Atom(S(id)), e] => {
+                                        if is_keyword(id) {
+                                            panic!("Invalid")
+                                        } else {
+                                            (id.to_string(), parse_expr(e))
+                                        }
+                                    }
                                     _ => panic!("Invalid"),
                                 },
                                 _ => panic!("Invalid"),
