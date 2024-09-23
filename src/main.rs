@@ -10,7 +10,6 @@ use sexp::*;
 enum Function {
     SnekPrint,
     SnekError,
-    ParseInput,
 }
 
 #[derive(Debug)]
@@ -392,7 +391,7 @@ fn compile_to_instrs(
     // offset from rsp, in bytes
     match e {
         // immediate values
-        Expr::Input => todo!(),
+        Expr::Input => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))],
         Expr::Boolean(_) => todo!(),
         Expr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
 
@@ -479,7 +478,6 @@ fn fn_to_str(f: &Function) -> String {
     match f {
         Function::SnekPrint => "snek_print".to_string(),
         Function::SnekError => "snek_error".to_string(),
-        Function::ParseInput => "parse_input".to_string(),
     }
 }
 

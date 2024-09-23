@@ -28,7 +28,8 @@ success_tests! {
         file: "binding1.snek",
         expected: "-5",
     },
-
+    
+    // Given Tests
     {
         name: false_val,
         file: "false_val.snek",
@@ -80,6 +81,23 @@ success_tests! {
         input: "10",
         expected: "true",
     },
+
+    // Custom Tests
+    {
+        name: input_plus1_1,
+        file: "input_plus1.snek",
+        input: "10",
+        expected: "11",
+    },
+    {
+        name: input_plus1_2,
+        file: "input_plus1.snek",
+        input: "0",
+        expected: "1",
+    },
+
+
+
 }
 
 runtime_error_tests! {

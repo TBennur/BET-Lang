@@ -38,8 +38,11 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64) {
 }
 
 fn parse_input(input: &str) -> u64 {
-    // TODO: parse the input string into internal value representation
-    0
+    // TODO: Panic on invalid input??
+   match input.parse::<u64>() {
+        Err(error) => panic!("Invalid Input"),
+        Ok(val) => val
+   }
 }
 
 fn main() {
