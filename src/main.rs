@@ -33,7 +33,8 @@ enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
-    Call(Function)
+    Call(Function),
+    Label(String)
 }
 
 #[derive(Debug)]
@@ -341,11 +342,12 @@ fn compile_bin_op_to_instrs(
     a: &Expr, // second arg
     scope_bindings: im::HashMap<String, i64>,
     mut rsp_offset: i64,
+    label_prefix: String,
 ) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
 
     // compute the value of a into RAX
-    let instr_to_compute_a = compile_to_instrs(a, scope_bindings.clone(), rsp_offset);
+    let instr_to_compute_a = compile_to_instrs(a, scope_bindings.clone(), rsp_offset, label_prefix.clone());
     instr_to_compute_res.extend(instr_to_compute_a);
 
     // store that value on the stack
@@ -358,7 +360,7 @@ fn compile_bin_op_to_instrs(
 
     // this computes b, and stores it in RAX. since we adjusted rsp_offset,
     // our stored value of a is still at a_rsp_offset
-    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset);
+    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset, label_prefix.clone());
     instr_to_compute_res.extend(inst_to_compute_b);
 
     // now we have `a` at the memory location RSP + a_rsp_offset, and `b` in RAX
@@ -386,6 +388,7 @@ fn compile_to_instrs(
     e: &Expr,
     scope_bindings: im::HashMap<String, i64>,
     rsp_offset: i64,
+    label_prefix: String,
 ) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
@@ -408,7 +411,7 @@ fn compile_to_instrs(
 
         // unary ops
         Expr::UnOp(op, exp) => {
-            let mut instructions = compile_to_instrs(exp, scope_bindings.clone(), rsp_offset);
+            let mut instructions = compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, label_prefix.clone());
 
             instructions.push(match op {
                 Op1::Add1 => Instr::IAdd,
@@ -418,7 +421,7 @@ fn compile_to_instrs(
         }
 
         // binary ops: put op(b, a) in rax
-        Expr::BinOp(op, b, a) => compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset),
+        Expr::BinOp(op, b, a) => compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset, label_prefix.clone()),
 
         // let expression
         Expr::Let(bindings, final_expr) => {
@@ -435,7 +438,7 @@ fn compile_to_instrs(
                 };
 
                 // compute the value of exp into RAX
-                let code_to_eval_exp = compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset);
+                let code_to_eval_exp = compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset, label_prefix.clone());
                 instructions_to_compile_let.extend(code_to_eval_exp);
 
                 // store that value on the stack
@@ -455,6 +458,7 @@ fn compile_to_instrs(
                 final_expr,
                 curr_let_binding,
                 curr_rsp_offset,
+                label_prefix.clone(),
             ));
 
             instructions_to_compile_let
@@ -469,11 +473,12 @@ fn compile_to_instrs(
 
 fn instr_to_str(i: &Instr) -> String {
     match i {
-        Instr::IMov(dst, src) => format!("mov {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::IAdd(dst, src) => format!("add {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::ISub(dst, src) => format!("sub {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::IMul(dst, src) => format!("imul {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::Call(function) => format!("call {}", fn_to_str(function)),
+        Instr::IMov(dst, src) => format!("\tmov {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
+        Instr::Label(s) => format!(".{}", s),
     }
 }
 
@@ -507,7 +512,7 @@ fn compile(e: &Expr) -> String {
         ExprType::Bool => 0,
     };
 
-    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0);
+    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0, "our_code_starts_here_".to_string());
   
     // Add Returning Instruction
     instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
