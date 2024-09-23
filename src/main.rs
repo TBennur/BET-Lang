@@ -7,6 +7,13 @@ use sexp::Atom::*;
 use sexp::*;
 
 #[derive(Debug)]
+enum Function {
+    SnekPrint,
+    SnekError,
+    ParseInput,
+}
+
+#[derive(Debug)]
 enum Val {
     Reg(Reg),
     Imm(i64),
@@ -17,6 +24,8 @@ enum Val {
 enum Reg {
     RAX,
     RSP,
+    RSI,
+    RDI,
 }
 
 #[derive(Debug)]
@@ -25,6 +34,7 @@ enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
+    Call(Function)
 }
 
 #[derive(Debug)]
@@ -461,6 +471,15 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::IAdd(dst, src) => format!("add {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::ISub(dst, src) => format!("sub {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::IMul(dst, src) => format!("imul {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::Call(function) => format!("call {}", fn_to_str(function)),
+    }
+}
+
+fn fn_to_str(f: &Function) -> String {
+    match f {
+        Function::SnekPrint => "snek_print".to_string(),
+        Function::SnekError => "snek_error".to_string(),
+        Function::ParseInput => "parse_input".to_string(),
     }
 }
 
@@ -468,6 +487,8 @@ fn reg_to_str(r: &Reg) -> String {
     match r {
         Reg::RAX => "rax".to_string(),
         Reg::RSP => "rsp".to_string(),
+        Reg::RSI => "rsi".to_string(),
+        Reg::RDI => "rdi".to_string(),
     }
 }
 
@@ -480,18 +501,22 @@ fn val_to_str(v: &Val) -> String {
 }
 
 fn compile(e: &Expr) -> String {
-    let flag: u64 = match type_check(e, im::HashMap::new()) {
+    let flag: i64 = match type_check(e, im::HashMap::new()) {
         ExprType::Int => 1,
         ExprType::Bool => 0,
     };
 
-    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0)
-        .into_iter()
+    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0);
+  
+    // Add Returning Instruction
+    instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
+    instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
+    instrs.push(Instr::Call(Function::SnekPrint));
+        
+    instrs.into_iter()
         .map(|instr| format!("  {}", instr_to_str(&instr)))
-        .collect::<Vec<String>>();
-
-    instrs.push(format!("mov rsi, {}", flag));
-    instrs.join("\n")
+        .collect::<Vec<String>>()
+        .join("\n")
 }
 
 fn main() -> std::io::Result<()> {
@@ -523,9 +548,6 @@ extern snek_print
 global our_code_starts_here
 our_code_starts_here:
 {}
-  mov rdi, rax
-  call snek_print
-  ret
 ",
         result
     );
