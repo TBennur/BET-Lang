@@ -33,8 +33,15 @@ enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
+    Compare(Val, Val),
     Call(Function),
-    Label(String)
+    AddLabel(String),
+    Jump(String),
+    JumpGreater(String),
+    JumpGreaterEqual(String),
+    JumpEqual(String),
+    JumpLessEqual(String),
+    JumpLess(String)
 }
 
 #[derive(Debug)]
@@ -188,7 +195,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                 match op.as_str() {
                     "add1" => Op1::Add1,
                     "sub1" => Op1::Sub1,
-                    _ => panic!("Invalid"),
+                    s => panic!("Invalid {:?} {:?}", s, e),
                 },
                 Box::new(parse_expr(e)),
             ),
@@ -277,7 +284,7 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
 
             // t * t => bool
             Op2::Equal => {
-                if type_check(a, type_bindings.clone()) == type_check(a, type_bindings.clone()) {
+                if type_check(a, type_bindings.clone()) == type_check(b, type_bindings.clone()) {
                     ExprType::Bool
                 } else {
                     panic!("type mismatch")
@@ -298,9 +305,11 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
 
         // t1 * t2 * t2 => t2
         Expr::If(cond, val_if_true, val_if_false) => {
-            // TODO: I think t1 isn't constrained to be a bool
+            // TODO: I think t1 isn't constrained to be a bool - i think it is revisit
             // cond should be well typed, though we don't care what that type is
-            type_check(cond, type_bindings.clone());
+            if type_check(cond, type_bindings.clone()) != ExprType::Bool {
+                panic!("type mismatch");
+            };
 
             let t2 = type_check(val_if_true, type_bindings.clone());
             let t2_prime = type_check(val_if_false, type_bindings.clone());
@@ -345,9 +354,13 @@ fn compile_bin_op_to_instrs(
     label_prefix: String,
 ) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
-
+    let mut op2_left_label_prefix = label_prefix.clone();
+    op2_left_label_prefix.push_str("_op2_left");
+    let mut op2_right_label_prefix = label_prefix.clone();
+    op2_right_label_prefix.push_str("_op2_right");
+ 
     // compute the value of a into RAX
-    let instr_to_compute_a = compile_to_instrs(a, scope_bindings.clone(), rsp_offset, label_prefix.clone());
+    let instr_to_compute_a = compile_to_instrs(a, scope_bindings.clone(), rsp_offset, op2_left_label_prefix.clone());
     instr_to_compute_res.extend(instr_to_compute_a);
 
     // store that value on the stack
@@ -360,24 +373,49 @@ fn compile_bin_op_to_instrs(
 
     // this computes b, and stores it in RAX. since we adjusted rsp_offset,
     // our stored value of a is still at a_rsp_offset
-    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset, label_prefix.clone());
+    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset, op2_right_label_prefix.clone());
     instr_to_compute_res.extend(inst_to_compute_b);
 
     // now we have `a` at the memory location RSP + a_rsp_offset, and `b` in RAX
     // use OP to compute OP(b <rax>, a <rsp + a_rsp_offset>)
-    instr_to_compute_res.push(match op {
-        Op2::Minus => Instr::ISub,
-        Op2::Plus => Instr::IAdd,
-        Op2::Times => Instr::IMul,
-        Op2::Equal => todo!(),
-        Op2::Greater => todo!(),
-        Op2::GreaterEqual => todo!(),
-        Op2::Less => todo!(),
-        Op2::LessEqual => todo!(),
-    }(
-        Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
-    ));
-
+    
+    match op {
+        Op2::Minus | Op2::Plus | Op2::Times => {
+            instr_to_compute_res.push(match op {
+                Op2::Minus => Instr::ISub,
+                Op2::Plus => Instr::IAdd,
+                Op2::Times => Instr::IMul,
+                _ => panic!("Unexpected"),
+            }(
+                Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
+            ));
+            // Do Overflow Checking
+        },
+        _ => {
+            instr_to_compute_res.push(Instr::Compare(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)));
+            let mut compare_true = label_prefix.clone();
+            compare_true.push_str("_compare_true");
+            let mut compare_finish = label_prefix.clone();
+            compare_finish.push_str("_compare_finish");
+            instr_to_compute_res.push(match op {
+                Op2::Greater => Instr::JumpGreater,
+                Op2::GreaterEqual => Instr::JumpGreaterEqual,
+                Op2::Equal => Instr::JumpEqual,
+                Op2::LessEqual => Instr::JumpLessEqual,
+                Op2::Less => Instr::JumpLess,
+                _ => panic!("Unexpected"),
+            }(
+                compare_true.clone()
+            ));
+            instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));
+            instr_to_compute_res.push(Instr::Jump(compare_finish.clone()));
+            instr_to_compute_res.push(Instr::AddLabel(compare_true.clone()));
+            instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1)));
+            instr_to_compute_res.push(Instr::Jump(compare_finish.clone()));
+            instr_to_compute_res.push(Instr::AddLabel(compare_finish.clone()));
+        }
+    };
+        
     instr_to_compute_res
 }
 
@@ -411,7 +449,10 @@ fn compile_to_instrs(
 
         // unary ops
         Expr::UnOp(op, exp) => {
-            let mut instructions = compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, label_prefix.clone());
+            let mut op1_label_prefix = label_prefix.clone();
+            op1_label_prefix.push_str("_op1");
+
+            let mut instructions = compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, op1_label_prefix.clone());
 
             instructions.push(match op {
                 Op1::Add1 => Instr::IAdd,
@@ -430,15 +471,19 @@ fn compile_to_instrs(
             let mut curr_let_binding = scope_bindings;
             let mut in_this_let: im::HashSet<String> = im::HashSet::new();
             // evaluate in order using lexical scoping
+            let mut i = 0;
+
             for (id, exp) in bindings {
                 // check for duplicates
                 match in_this_let.insert(id.to_string()) {
                     None => (),
                     Some(_) => panic!("Duplicate binding"),
                 };
-
+                let mut let_label_prefix = label_prefix.clone();
+                let_label_prefix.push_str(&format!("_let{}", i).to_string());
+                i += 1;
                 // compute the value of exp into RAX
-                let code_to_eval_exp = compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset, label_prefix.clone());
+                let code_to_eval_exp = compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset, let_label_prefix.clone());
                 instructions_to_compile_let.extend(code_to_eval_exp);
 
                 // store that value on the stack
@@ -452,13 +497,16 @@ fn compile_to_instrs(
                 // bind id to that location on the stack (in doing so, to that result)
                 curr_let_binding.insert(id.to_string(), id_rsp_offset);
             }
+            
+            let mut let_label_prefix = label_prefix.clone();
+            let_label_prefix.push_str(&format!("_let{}", i).to_string());
 
             // evaluate the final expression after all the bindings into RAX
             instructions_to_compile_let.extend(compile_to_instrs(
                 final_expr,
                 curr_let_binding,
                 curr_rsp_offset,
-                label_prefix.clone(),
+                let_label_prefix.clone(),
             ));
 
             instructions_to_compile_let
@@ -477,8 +525,15 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
-        Instr::Label(s) => format!(".{}", s),
+        Instr::AddLabel(label) => format!("{}:", label.to_string()),
+        Instr::Jump(label) => format!("\tjmp {}", label.to_string()),
+        Instr::JumpGreater(label) => format!("\tjg {}", label.to_string()),
+        Instr::JumpGreaterEqual(label) => format!("\tjge {}", label.to_string()),
+        Instr::JumpEqual(label) => format!("\tje {}", label.to_string()),
+        Instr::JumpLessEqual(label) => format!("\tjle {}", label.to_string()),
+        Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
     }
 }
 
@@ -512,7 +567,7 @@ fn compile(e: &Expr) -> String {
         ExprType::Bool => 0,
     };
 
-    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0, "our_code_starts_here_".to_string());
+    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0, "our_code_starts_here".to_string());
   
     // Add Returning Instruction
     instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
