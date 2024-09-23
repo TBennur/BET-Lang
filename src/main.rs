@@ -342,9 +342,15 @@ fn main() -> std::io::Result<()> {
     let asm_program = format!(
         "
 section .text
+
+extern snek_print
+
 global our_code_starts_here
 our_code_starts_here:
 {}
+  mov rdi, rax
+  mov rsi, 1; hardcode flag to int
+  call snek_print
   ret
 ",
         result

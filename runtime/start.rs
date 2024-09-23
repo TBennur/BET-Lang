@@ -16,11 +16,26 @@ pub extern "C" fn snek_error(errcode: i64) {
     std::process::exit(1);
 }
 
+static is_bool: u64 = 0;
+static is_int: u64 = 1;
+
 #[export_name = "\x01snek_print"]
 pub extern "C" fn snek_print(value: i64, type_flag: u64) {
+    if type_flag == is_bool {
+        if value == 0 {
+            println!("false");
+        } else {
+            println!("true");
+        }
+    } else if type_flag == is_int {
+        println!("{}", value);
+    } else {
+        println!("unknown flag");
+    }
+
+
     // TODO: print the value according to the writeup
 }
-
 
 fn parse_input(input: &str) -> u64 {
     // TODO: parse the input string into internal value representation
