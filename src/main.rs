@@ -33,39 +33,34 @@ enum Op1 {
     Sub1,
 }
 
-enum Variable {
-    // Type(location on stack)
-    Int(i64),
-    Bool(i64),
-}
-
 #[derive(Debug)]
 enum Op2 {
     Plus,
     Minus,
     Times,
-    // Equal,
-    // Greater,
-    // GreaterEqual,
-    // Less,
-    // LessEqual,
+    Equal,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
 }
 
 #[derive(Debug)]
 enum Expr {
     Number(i64),
-    // Boolean(bool),
+    Boolean(bool),
     Id(String),
     Let(Vec<(String, Expr)>, Box<Expr>),
     UnOp(Op1, Box<Expr>),
     BinOp(Op2, Box<Expr>, Box<Expr>),
-    // If(Box<Expr>, Box<Expr>, Box<Expr>),
-    // RepeatUntil(Box<Expr>, Box<Expr>),
-    // Set(String, Box<Expr>),
-    // Block(Vec<Expr>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
+    RepeatUntil(Box<Expr>, Box<Expr>),
+    Set(String, Box<Expr>),
+    Block(Vec<Expr>),
+    Input,
 }
 
-fn is_keyword(id: &String) -> bool {
+fn is_keyword(id: &str) -> bool {
     return vec![
         "true",
         "false",
@@ -73,11 +68,19 @@ fn is_keyword(id: &String) -> bool {
         "let",
         "add1",
         "sub1",
+        "set!",
         "if",
         "block",
         "repeat-until",
     ]
-    .contains(&id.as_str());
+    .contains(&id);
+}
+
+fn id_to_string(id: &str) -> String {
+    if is_keyword(id) {
+        panic!("Invalid")
+    }
+    id.to_string()
 }
 
 fn parse_expr(s: &Sexp) -> Expr {
@@ -85,20 +88,47 @@ fn parse_expr(s: &Sexp) -> Expr {
         // atoms
         Sexp::Atom(I(n)) => Expr::Number(i64::try_from(*n).unwrap()),
         Sexp::Atom(S(id)) => match id.as_str() {
-            "let" | "add1" | "sub1" => panic!("Invalid"),
-            _ => Expr::Id(id.to_string()),
+            "true" => Expr::Boolean(true),
+            "false" => Expr::Boolean(false),
+            "input" => Expr::Input,
+            id => Expr::Id(id_to_string(id)),
         },
 
         // vectors
         Sexp::List(vec) => match &vec[..] {
-            // un ops (exactly two things in vec)
-            [Sexp::Atom(S(op)), e] => Expr::UnOp(
-                match op.as_str() {
-                    "add1" => Op1::Add1,
-                    "sub1" => Op1::Sub1,
-                    _ => panic!("Invalid"),
-                },
-                Box::new(parse_expr(e)),
+            // block
+            // has the form block <expr>+
+            [Sexp::Atom(S(op)), exprns @ ..] if op == "block" => {
+                if exprns.len() == 0 {
+                    panic!("Invalid")
+                } else {
+                    Expr::Block(
+                        exprns
+                            .into_iter()
+                            .map(|element| parse_expr(element))
+                            .collect(),
+                    )
+                }
+            }
+
+            // set!
+            // has the form set <name> <expr>
+            [Sexp::Atom(S(op)), Sexp::Atom(S(name)), expr] if op == "set!" => {
+                Expr::Set(id_to_string(name), Box::new(parse_expr(expr)))
+            }
+
+            // repeat-until
+            // has the form repeat-until <expr> <expr>
+            [Sexp::Atom(S(op)), body, stop_cond] if op == "repeat-until" => {
+                Expr::RepeatUntil(Box::new(parse_expr(body)), Box::new(parse_expr(stop_cond)))
+            }
+
+            // if expression
+            // has the form if <expr> <expr> <expr>
+            [Sexp::Atom(S(op)), cond, then_case, else_case] if op == "if" => Expr::If(
+                Box::new(parse_expr(cond)),
+                Box::new(parse_expr(then_case)),
+                Box::new(parse_expr(else_case)),
             ),
 
             // let expression
@@ -112,13 +142,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                             .into_iter()
                             .map(|element| match element {
                                 Sexp::List(binding) => match &binding[..] {
-                                    [Sexp::Atom(S(id)), e] => {
-                                        if is_keyword(id) {
-                                            panic!("Invalid")
-                                        } else {
-                                            (id.to_string(), parse_expr(e))
-                                        }
-                                    }
+                                    [Sexp::Atom(S(id)), e] => (id_to_string(id), parse_expr(e)),
                                     _ => panic!("Invalid"),
                                 },
                                 _ => panic!("Invalid"),
@@ -129,16 +153,34 @@ fn parse_expr(s: &Sexp) -> Expr {
                 }
             }
 
+            // match bin & un ops after everything else, so we don't try to
+            // match other "un" ops like, ex, set
+
             // bin ops (exactly three things in vec)
             [Sexp::Atom(S(op)), arg1, arg2] => Expr::BinOp(
                 match op.as_str() {
                     "+" => Op2::Plus,
                     "-" => Op2::Minus,
                     "*" => Op2::Times,
+                    "=" => Op2::Equal,
+                    ">" => Op2::Greater,
+                    ">=" => Op2::GreaterEqual,
+                    "<" => Op2::Less,
+                    "<=" => Op2::LessEqual,
                     _ => panic!("Invalid"),
                 },
                 Box::new(parse_expr(arg1)),
                 Box::new(parse_expr(arg2)),
+            ),
+
+            // un ops (exactly two things in vec)
+            [Sexp::Atom(S(op)), e] => Expr::UnOp(
+                match op.as_str() {
+                    "add1" => Op1::Add1,
+                    "sub1" => Op1::Sub1,
+                    _ => panic!("Invalid"),
+                },
+                Box::new(parse_expr(e)),
             ),
 
             _ => panic!("Invalid"),
@@ -149,7 +191,7 @@ fn parse_expr(s: &Sexp) -> Expr {
 
 const SIZEOF_I_64: i64 = 8; // size of an integer in bytes
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum ExprType {
     Int,
     Bool,
@@ -157,6 +199,10 @@ enum ExprType {
 
 fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprType {
     match e {
+        Expr::Input => ExprType::Int,
+
+        Expr::Boolean(_) => ExprType::Bool,
+
         Expr::Id(id) => match type_bindings.get(id) {
             None => panic!("Invalid"),
             Some(t) => *t,
@@ -167,6 +213,22 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
             ExprType::Int => ExprType::Int,
             _ => panic!("type mismatch"),
         },
+
+        Expr::Set(name, new_value) => {
+            // fails if the name isn't in scope
+            let t1 = *match type_bindings.get(name) {
+                Some(t1) => t1,
+                None => panic!("Invalid"),
+            };
+
+            // TODO: I think that it must update the variable to the same type.
+            // otherwise, things would get very messy
+            let t1_prime = type_check(new_value, type_bindings.clone());
+            if t1_prime != t1 {
+                panic!("type mismatch")
+            }
+            t1
+        }
 
         Expr::Let(bindings, finally) => {
             let mut curr_let_binding = type_bindings;
@@ -191,29 +253,76 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
             type_check(finally, curr_let_binding)
         }
 
-        Expr::BinOp(op2, expr, expr1) => match op2 {
-            Op2::Plus => match type_check(expr, type_bindings.clone()) {
-                ExprType::Int => match type_check(expr1, type_bindings) {
-                    ExprType::Int => ExprType::Int,
-                    _ => panic!("type mismatch"),
-                },
-                _ => panic!("type mismatch"),
-            },
-            Op2::Minus => match type_check(expr, type_bindings.clone()) {
-                ExprType::Int => match type_check(expr1, type_bindings) {
-                    ExprType::Int => ExprType::Int,
-                    _ => panic!("type mismatch"),
-                },
-                _ => panic!("type mismatch"),
-            },
-            Op2::Times => match type_check(expr, type_bindings.clone()) {
-                ExprType::Int => match type_check(expr1, type_bindings) {
-                    ExprType::Int => ExprType::Int,
-                    _ => panic!("type mismatch"),
-                },
-                _ => panic!("type mismatch"),
-            },
+        Expr::BinOp(op2, a, b) => match op2 {
+            // int * int => int
+            Op2::Plus | Op2::Minus | Op2::Times => {
+                if type_check(a, type_bindings.clone()) == ExprType::Int
+                    && type_check(b, type_bindings.clone()) == ExprType::Int
+                {
+                    ExprType::Int
+                } else {
+                    panic!("type mismatch")
+                }
+            }
+
+            // t * t => bool
+            Op2::Equal => {
+                if type_check(a, type_bindings.clone()) == type_check(a, type_bindings.clone()) {
+                    ExprType::Bool
+                } else {
+                    panic!("type mismatch")
+                }
+            }
+
+            // int * int => int
+            Op2::Greater | Op2::GreaterEqual | Op2::Less | Op2::LessEqual => {
+                if type_check(a, type_bindings.clone()) == ExprType::Int
+                    && type_check(b, type_bindings.clone()) == ExprType::Int
+                {
+                    ExprType::Bool
+                } else {
+                    panic!("type mismatch")
+                }
+            }
         },
+
+        // t1 * t2 * t2 => t2
+        Expr::If(cond, val_if_true, val_if_false) => {
+            // TODO: I think t1 isn't constrained to be a bool
+            // cond should be well typed, though we don't care what that type is
+            type_check(cond, type_bindings.clone());
+
+            let t2 = type_check(val_if_true, type_bindings.clone());
+            let t2_prime = type_check(val_if_false, type_bindings.clone());
+            if t2 == t2_prime {
+                t2
+            } else {
+                panic!("type mismatch")
+            }
+        }
+
+        // t1 * t2 => t1
+        Expr::RepeatUntil(body, stop_cond) => {
+            if type_check(stop_cond, type_bindings.clone()) != ExprType::Bool {
+                // TODO: does this actually have to be a bool?
+                panic!("type mismatch")
+            } else {
+                type_check(body, type_bindings.clone())
+            }
+        }
+
+        Expr::Block(expns) => {
+            if expns.len() == 0 {
+                panic!("invalid")
+            }
+            let mut final_type = ExprType::Int;
+            for expr in expns {
+                // typecheck each expression in the block
+                final_type = type_check(expr, type_bindings.clone());
+            }
+            // since block evaluates to the type of the last expression, that's the type of the block
+            final_type
+        }
     }
 }
 
@@ -249,6 +358,11 @@ fn compile_bin_op_to_instrs(
         Op2::Minus => Instr::ISub,
         Op2::Plus => Instr::IAdd,
         Op2::Times => Instr::IMul,
+        Op2::Equal => todo!(),
+        Op2::Greater => todo!(),
+        Op2::GreaterEqual => todo!(),
+        Op2::Less => todo!(),
+        Op2::LessEqual => todo!(),
     }(
         Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
     ));
@@ -268,6 +382,8 @@ fn compile_to_instrs(
     // offset from rsp, in bytes
     match e {
         // immediate values
+        Expr::Input => todo!(),
+        Expr::Boolean(_) => todo!(),
         Expr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
 
         Expr::Id(identifier) => match scope_bindings.get(identifier) {
@@ -331,6 +447,11 @@ fn compile_to_instrs(
 
             instructions_to_compile_let
         }
+
+        Expr::If(expr, expr1, expr2) => todo!(),
+        Expr::RepeatUntil(expr, expr1) => todo!(),
+        Expr::Set(_, expr) => todo!(),
+        Expr::Block(vec) => todo!(),
     }
 }
 
@@ -388,11 +509,6 @@ fn main() -> std::io::Result<()> {
         Ok(sexp) => parse_expr(sexp),
         Err(_) => panic!("Invalid"),
     };
-
-    // println!("{:#?}", expr);
-
-    // let instructions = compile_to_instrs(&expr, im::HashMap::new(), 0);
-    // println!("{:#?}", instructions);
 
     let result = compile(&expr);
 
