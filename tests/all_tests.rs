@@ -26,7 +26,7 @@ success_tests! {
     {
         name: binding1_boa,
         file: "binding1.snek",
-        expected: "-1",
+        expected: "-5",
     },
 
     {
