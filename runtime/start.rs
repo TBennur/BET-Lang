@@ -16,8 +16,8 @@ pub extern "C" fn snek_error(errcode: i64) {
     std::process::exit(1);
 }
 
-static is_bool: u64 = 0;
-static is_int: u64 = 1;
+const is_bool: u64 = 0;
+const is_int: u64 = 1;
 
 #[export_name = "\x01snek_print"]
 pub extern "C" fn snek_print(value: i64, type_flag: u64) {

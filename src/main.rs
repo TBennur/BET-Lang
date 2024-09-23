@@ -9,8 +9,8 @@ use sexp::*;
 #[derive(Debug)]
 enum Val {
     Reg(Reg),
-    Imm(i32),
-    RegOffset(Reg, i32),
+    Imm(i64),
+    RegOffset(Reg, i64),
 }
 
 #[derive(Debug)]
@@ -33,26 +33,57 @@ enum Op1 {
     Sub1,
 }
 
+enum Variable {
+    // Type(location on stack)
+    Int(i64),
+    Bool(i64),
+}
+
 #[derive(Debug)]
 enum Op2 {
     Plus,
     Minus,
     Times,
+    // Equal,
+    // Greater,
+    // GreaterEqual,
+    // Less,
+    // LessEqual,
 }
 
 #[derive(Debug)]
 enum Expr {
-    Number(i32),
+    Number(i64),
+    // Boolean(bool),
     Id(String),
     Let(Vec<(String, Expr)>, Box<Expr>),
     UnOp(Op1, Box<Expr>),
     BinOp(Op2, Box<Expr>, Box<Expr>),
+    // If(Box<Expr>, Box<Expr>, Box<Expr>),
+    // RepeatUntil(Box<Expr>, Box<Expr>),
+    // Set(String, Box<Expr>),
+    // Block(Vec<Expr>),
+}
+
+fn is_keyword(id: &String) -> bool {
+    return vec![
+        "true",
+        "false",
+        "input",
+        "let",
+        "add1",
+        "sub1",
+        "if",
+        "block",
+        "repeat-until",
+    ]
+    .contains(&id.as_str());
 }
 
 fn parse_expr(s: &Sexp) -> Expr {
     match s {
         // atoms
-        Sexp::Atom(I(n)) => Expr::Number(i32::try_from(*n).unwrap()),
+        Sexp::Atom(I(n)) => Expr::Number(i64::try_from(*n).unwrap()),
         Sexp::Atom(S(id)) => match id.as_str() {
             "let" | "add1" | "sub1" => panic!("Invalid"),
             _ => Expr::Id(id.to_string()),
@@ -110,14 +141,82 @@ fn parse_expr(s: &Sexp) -> Expr {
     }
 }
 
-const SIZEOF_I_64: i32 = 8; // size of an integer in bytes
+const SIZEOF_I_64: i64 = 8; // size of an integer in bytes
+
+#[derive(Clone, Copy)]
+enum ExprType {
+    Int,
+    Bool,
+}
+
+fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprType {
+    match e {
+        Expr::Id(id) => match type_bindings.get(id) {
+            None => panic!("Invalid"),
+            Some(t) => *t,
+        },
+        Expr::Number(_) => ExprType::Int,
+
+        Expr::UnOp(_, expr) => match type_check(expr, type_bindings) {
+            ExprType::Int => ExprType::Int,
+            _ => panic!("type mismatch"),
+        },
+
+        Expr::Let(bindings, finally) => {
+            let mut curr_let_binding = type_bindings;
+            let mut in_this_let: im::HashSet<String> = im::HashSet::new();
+
+            for (id, exp) in bindings {
+                // check for duplicates
+                match in_this_let.insert(id.to_string()) {
+                    None => (),
+                    Some(_) => panic!("Duplicate binding"),
+                };
+
+                // typecheck the expression
+                // panics if if doesn't typecheck
+                let expr_type = type_check(exp, curr_let_binding.clone());
+
+                // bind id to that type, allowing shadowing of different types
+                curr_let_binding.insert(id.to_string(), expr_type);
+            }
+
+            // evaluate the type of the final expression after all the bindings
+            type_check(finally, curr_let_binding)
+        }
+
+        Expr::BinOp(op2, expr, expr1) => match op2 {
+            Op2::Plus => match type_check(expr, type_bindings.clone()) {
+                ExprType::Int => match type_check(expr1, type_bindings) {
+                    ExprType::Int => ExprType::Int,
+                    _ => panic!("type mismatch"),
+                },
+                _ => panic!("type mismatch"),
+            },
+            Op2::Minus => match type_check(expr, type_bindings.clone()) {
+                ExprType::Int => match type_check(expr1, type_bindings) {
+                    ExprType::Int => ExprType::Int,
+                    _ => panic!("type mismatch"),
+                },
+                _ => panic!("type mismatch"),
+            },
+            Op2::Times => match type_check(expr, type_bindings.clone()) {
+                ExprType::Int => match type_check(expr1, type_bindings) {
+                    ExprType::Int => ExprType::Int,
+                    _ => panic!("type mismatch"),
+                },
+                _ => panic!("type mismatch"),
+            },
+        },
+    }
+}
 
 fn compile_bin_op_to_instrs(
     op: &Op2,
     b: &Expr, // first arg
     a: &Expr, // second arg
-    scope_bindings: im::HashMap<String, i32>,
-    mut rsp_offset: i32,
+    scope_bindings: im::HashMap<String, i64>,
+    mut rsp_offset: i64,
 ) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
 
@@ -156,12 +255,11 @@ fn compile_bin_op_to_instrs(
 /// rsp_offset is the next available position on rsp to be used for storing results
 fn compile_to_instrs(
     e: &Expr,
-    scope_bindings: im::HashMap<String, i32>,
-    rsp_offset: i32,
+    scope_bindings: im::HashMap<String, i64>,
+    rsp_offset: i64,
 ) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
-
     match e {
         // immediate values
         Expr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
@@ -255,63 +353,18 @@ fn val_to_str(v: &Val) -> String {
 }
 
 fn compile(e: &Expr) -> String {
-    compile_to_instrs(e, im::HashMap::new(), 0)
+    let flag: u64 = match type_check(e, im::HashMap::new()) {
+        ExprType::Int => 1,
+        ExprType::Bool => 0,
+    };
+
+    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0)
         .into_iter()
         .map(|instr| format!("  {}", instr_to_str(&instr)))
-        .collect::<Vec<String>>()
-        .join("\n")
-}
+        .collect::<Vec<String>>();
 
-/// Evaluate an expression
-fn compute(e: &Expr) -> i64 {
-    compute_recursive(e, im::HashMap::new())
-}
-
-fn compute_recursive(e: &Expr, scope_bindings: im::HashMap<String, i32>) -> i64 {
-    // scope bindings holds the actual value-- not the RSP offset
-    match e {
-        Expr::Number(x) => *x as i64,
-        Expr::Id(id) => match scope_bindings.get(id) {
-            None => panic!("{}", format!("Unbound variable identifier {}", id)),
-            Some(x) => *x as i64,
-        },
-        Expr::UnOp(op, arg) => match op {
-            Op1::Add1 => compute_recursive(arg, scope_bindings) + 1,
-            Op1::Sub1 => compute_recursive(arg, scope_bindings) - 1,
-        },
-        Expr::BinOp(op, arg1, arg2) => {
-            let arg1 = compute_recursive(arg1, scope_bindings.clone());
-            let arg2 = compute_recursive(arg2, scope_bindings.clone());
-
-            let operator = match op {
-                Op2::Plus => std::ops::Add::add,
-                Op2::Minus => std::ops::Sub::sub,
-                Op2::Times => std::ops::Mul::mul,
-            };
-            operator(arg1, arg2)
-        }
-
-        Expr::Let(bindings, finially) => {
-            let mut curr_let_binding = scope_bindings;
-            let mut in_this_let: im::HashSet<String> = im::HashSet::new();
-            // evaluate in order using lexical scoping
-            for (id, exp) in bindings {
-                // check for duplicates
-                match in_this_let.insert(id.to_string()) {
-                    None => (),
-                    Some(_) => panic!("Duplicate binding"),
-                };
-
-                // bind id to the computed value
-                curr_let_binding.insert(
-                    id.to_string(),
-                    compute_recursive(exp, curr_let_binding.clone()) as i32,
-                );
-            }
-
-            compute_recursive(finially, curr_let_binding.clone())
-        }
-    }
+    instrs.push(format!("mov rsi, {}", flag));
+    instrs.join("\n")
 }
 
 fn main() -> std::io::Result<()> {
@@ -349,7 +402,6 @@ global our_code_starts_here
 our_code_starts_here:
 {}
   mov rdi, rax
-  mov rsi, 1; hardcode flag to int
   call snek_print
   ret
 ",
