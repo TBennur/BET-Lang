@@ -28,7 +28,7 @@ success_tests! {
         file: "binding1.snek",
         expected: "-5",
     },
-    
+
     // Provided Tests
     {
         name: false_val,
@@ -220,6 +220,16 @@ success_tests! {
         file: "not_equal_bool.snek",
         expected: "false",
     },
+    {
+        name: good_set,
+        file: "good_set.snek",
+        expected: "6",
+    },
+    {
+        name: basic_block,
+        file: "basic_block.snek",
+        expected: "3",
+    },
 
     // Ensemble Tests
     {
@@ -277,5 +287,10 @@ static_error_tests! {
         name: number_bounds_fail,
         file: "number_bounds_fail.snek",
         expected: "Invalid",
-    }
+    },
+    {
+        name: failed_set,
+        file: "failed_set.snek",
+        expected: "mismatch",
+    },
 }
