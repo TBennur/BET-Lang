@@ -28,7 +28,8 @@ success_tests! {
         file: "binding1.snek",
         expected: "-5",
     },
-
+    
+    // Provided Tests
     {
         name: false_val,
         file: "false_val.snek",
@@ -80,6 +81,167 @@ success_tests! {
         input: "10",
         expected: "true",
     },
+
+    // Unit Tests
+    {
+        name: input_plus1_1,
+        file: "input_plus1.snek",
+        input: "10",
+        expected: "11",
+    },
+    {
+        name: input_plus1_2,
+        file: "input_plus1.snek",
+        input: "0",
+        expected: "1",
+    },
+    {
+        name: true_val,
+        file: "true_val.snek",
+        expected: "true",
+    },
+    {
+        name: negative_one_val,
+        file: "negative_one_val.snek",
+        expected: "-1",
+    },
+    {
+        name: zero_val,
+        file: "zero_val.snek",
+        expected: "0",
+    },
+    {
+        name: one_val,
+        file: "one_val.snek",
+        expected: "1",
+    },
+    {
+        name: five_val,
+        file: "five_val.snek",
+        expected: "5",
+    },
+    {
+        name: compare_greater_1,
+        file: "compare_greater.snek",
+        input: "6",
+        expected: "true",
+    },
+    {
+        name: compare_greater_2,
+        file: "compare_greater.snek",
+        input: "5",
+        expected: "false",
+    },
+    {
+        name: compare_greater_3,
+        file: "compare_greater.snek",
+        input: "4",
+        expected: "false",
+    },
+    {
+        name: compare_greater_equal_1,
+        file: "compare_greater_equal.snek",
+        input: "6",
+        expected: "true",
+    },
+    {
+        name: compare_greater_equal_2,
+        file: "compare_greater_equal.snek",
+        input: "5",
+        expected: "true",
+    },
+    {
+        name: compare_greater_equal_3,
+        file: "compare_greater_equal.snek",
+        input: "4",
+        expected: "false",
+    },
+    {
+        name: compare_equal_1,
+        file: "compare_equal.snek",
+        input: "6",
+        expected: "false",
+    },
+    {
+        name: compare_equal_2,
+        file: "compare_equal.snek",
+        input: "5",
+        expected: "true",
+    },
+    {
+        name: compare_equal_3,
+        file: "compare_equal.snek",
+        input: "4",
+        expected: "false",
+    },
+    {
+        name: compare_less_equal_1,
+        file: "compare_less_equal.snek",
+        input: "6",
+        expected: "false",
+    },
+    {
+        name: compare_less_equal_2,
+        file: "compare_less_equal.snek",
+        input: "5",
+        expected: "true",
+    },
+    {
+        name: compare_less_equal_3,
+        file: "compare_less_equal.snek",
+        input: "4",
+        expected: "true",
+    },
+    {
+        name: compare_less_1,
+        file: "compare_less.snek",
+        input: "6",
+        expected: "false",
+    },
+    {
+        name: compare_less_2,
+        file: "compare_less.snek",
+        input: "5",
+        expected: "false",
+    },
+    {
+        name: compare_less_3,
+        file: "compare_less.snek",
+        input: "4",
+        expected: "true",
+    },
+    {
+        name: equal_bool,
+        file: "equal_bool.snek",
+        expected: "true",
+    },
+   {
+        name: not_equal_bool,
+        file: "not_equal_bool.snek",
+        expected: "false",
+    },
+
+    // Ensemble Tests
+    {
+        name: equal_bool_compound,
+        file: "equal_bool_compound.snek",
+        expected: "true",
+    },
+    {
+        name: equal_bool_let,
+        file: "equal_bool_let.snek",
+        expected: "true",
+    },
+    {
+        name: if_nested,
+        file: "if_nested.snek",
+        expected: "5",
+    },
+    {
+        name: if_let,
+        file: "if_let.snek",
+        expected: "5",
+    },
 }
 
 runtime_error_tests! {
@@ -94,6 +256,21 @@ static_error_tests! {
     {
         name: invalid_argument,
         file: "invalid_argument.snek",
+        expected: "mismatch",
+    },
+    {
+        name: invalid_argument_add1,
+        file: "invalid_argument_add1.snek",
+        expected: "mismatch",
+    },
+    {
+        name: invalid_argument_greater,
+        file: "invalid_argument_greater.snek",
+        expected: "mismatch",
+    },
+        {
+        name: invalid_argument_equal,
+        file: "invalid_argument_equal.snek",
         expected: "mismatch",
     },
     {
