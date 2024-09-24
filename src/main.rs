@@ -42,7 +42,8 @@ enum Instr {
     JumpEqual(String),
     JumpLessEqual(String),
     JumpLess(String),
-    JumpOverflow(String)
+    JumpOverflow(String),
+    Ret,
 }
 
 #[derive(Debug)]
@@ -106,11 +107,9 @@ fn id_to_string(id: &str) -> String {
 fn parse_expr(s: &Sexp) -> Expr {
     match s {
         // atoms
-        Sexp::Atom(I(n)) => {
-            match <i32>::try_from(*n) {
-                Ok(num) => Expr::Number(num),
-                Err(err) => panic!("Invalid"),
-            }
+        Sexp::Atom(I(n)) => match <i32>::try_from(*n) {
+            Ok(num) => Expr::Number(num),
+            Err(_) => panic!("Invalid"),
         },
         Sexp::Atom(S(id)) => match id.as_str() {
             "true" => Expr::Boolean(true),
@@ -214,7 +213,6 @@ fn parse_expr(s: &Sexp) -> Expr {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq)]
 enum ExprType {
     Int,
@@ -245,8 +243,7 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
                 None => panic!("Invalid"),
             };
 
-            // TODO: I think that it must update the variable to the same type.
-            // otherwise, things would get very messy
+            // can only "set" a variable to the same type within the current scope
             let t1_prime = type_check(new_value, type_bindings.clone());
             if t1_prime != t1 {
                 panic!("type mismatch")
@@ -310,10 +307,9 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
             }
         },
 
-        // t1 * t2 * t2 => t2
+        // bool * t2 * t2 => t2
         Expr::If(cond, val_if_true, val_if_false) => {
-            // TODO: I think t1 isn't constrained to be a bool - i think it is revisit
-            // cond should be well typed, though we don't care what that type is
+            // cond should typecheck to bool
             if type_check(cond, type_bindings.clone()) != ExprType::Bool {
                 panic!("type mismatch");
             };
@@ -329,12 +325,13 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
 
         // t1 * t2 => t1
         Expr::RepeatUntil(body, stop_cond) => {
+            // stop_cond must be a bool
             if type_check(stop_cond, type_bindings.clone()) != ExprType::Bool {
-                // TODO: does this actually have to be a bool?
                 panic!("type mismatch")
-            } else {
-                type_check(body, type_bindings.clone())
             }
+
+            // repeat-until evaluates to the body (once stop_cond is true)
+            type_check(body, type_bindings.clone())
         }
 
         Expr::Block(expns) => {
@@ -365,9 +362,14 @@ fn compile_bin_op_to_instrs(
     op2_left_label_prefix.push_str("_op2_left");
     let mut op2_right_label_prefix = label_prefix.clone();
     op2_right_label_prefix.push_str("_op2_right");
- 
+
     // compute the value of a into RAX
-    let instr_to_compute_a = compile_to_instrs(a, scope_bindings.clone(), rsp_offset, op2_left_label_prefix.clone());
+    let instr_to_compute_a = compile_to_instrs(
+        a,
+        scope_bindings.clone(),
+        rsp_offset,
+        op2_left_label_prefix.clone(),
+    );
     instr_to_compute_res.extend(instr_to_compute_a);
 
     // store that value on the stack
@@ -380,12 +382,17 @@ fn compile_bin_op_to_instrs(
 
     // this computes b, and stores it in RAX. since we adjusted rsp_offset,
     // our stored value of a is still at a_rsp_offset
-    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset, op2_right_label_prefix.clone());
+    let inst_to_compute_b = compile_to_instrs(
+        b,
+        scope_bindings.clone(),
+        rsp_offset,
+        op2_right_label_prefix.clone(),
+    );
     instr_to_compute_res.extend(inst_to_compute_b);
 
     // now we have `a` at the memory location RSP + a_rsp_offset, and `b` in RAX
     // use OP to compute OP(b <rax>, a <rsp + a_rsp_offset>)
-    
+
     match op {
         Op2::Minus | Op2::Plus | Op2::Times => {
             instr_to_compute_res.push(match op {
@@ -397,10 +404,15 @@ fn compile_bin_op_to_instrs(
                 Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
             ));
             // Do Overflow Checking
-            instr_to_compute_res.push(Instr::JumpOverflow("our_code_starts_here_overflow".to_string()));
-        },
+            instr_to_compute_res.push(Instr::JumpOverflow(
+                "our_code_starts_here_overflow".to_string(),
+            ));
+        }
         _ => {
-            instr_to_compute_res.push(Instr::Compare(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)));
+            instr_to_compute_res.push(Instr::Compare(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            ));
             let mut compare_true = label_prefix.clone();
             compare_true.push_str("_compare_true");
             let mut compare_finish = label_prefix.clone();
@@ -412,9 +424,7 @@ fn compile_bin_op_to_instrs(
                 Op2::LessEqual => Instr::JumpLessEqual,
                 Op2::Less => Instr::JumpLess,
                 _ => panic!("Unexpected"),
-            }(
-                compare_true.clone()
-            ));
+            }(compare_true.clone()));
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));
             instr_to_compute_res.push(Instr::Jump(compare_finish.clone()));
             instr_to_compute_res.push(Instr::AddLabel(compare_true.clone()));
@@ -423,7 +433,7 @@ fn compile_bin_op_to_instrs(
             instr_to_compute_res.push(Instr::AddLabel(compare_finish.clone()));
         }
     };
-        
+
     instr_to_compute_res
 }
 
@@ -443,11 +453,9 @@ fn compile_to_instrs(
         Expr::Input => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))],
         Expr::Boolean(b) => match b {
             false => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
-            true => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1))]
+            true => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1))],
         },
-        Expr::Number(x) => vec![
-            Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x)),
-        ],
+        Expr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
 
         Expr::Id(identifier) => match scope_bindings.get(identifier) {
             None => panic!("{}", format!("Unbound variable identifier {}", identifier)),
@@ -462,7 +470,12 @@ fn compile_to_instrs(
             let mut op1_label_prefix = label_prefix.clone();
             op1_label_prefix.push_str("_op1");
 
-            let mut instructions = compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, op1_label_prefix.clone());
+            let mut instructions = compile_to_instrs(
+                exp,
+                scope_bindings.clone(),
+                rsp_offset,
+                op1_label_prefix.clone(),
+            );
 
             instructions.push(match op {
                 Op1::Add1 => Instr::IAdd,
@@ -472,7 +485,9 @@ fn compile_to_instrs(
         }
 
         // binary ops: put op(b, a) in rax
-        Expr::BinOp(op, b, a) => compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset, label_prefix.clone()),
+        Expr::BinOp(op, b, a) => {
+            compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset, label_prefix.clone())
+        }
 
         // let expression
         Expr::Let(bindings, final_expr) => {
@@ -493,7 +508,12 @@ fn compile_to_instrs(
                 let_label_prefix.push_str(&format!("_let{}", i).to_string());
                 i += 1;
                 // compute the value of exp into RAX
-                let code_to_eval_exp = compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset, let_label_prefix.clone());
+                let code_to_eval_exp = compile_to_instrs(
+                    exp,
+                    curr_let_binding.clone(),
+                    rsp_offset,
+                    let_label_prefix.clone(),
+                );
                 instructions_to_compile_let.extend(code_to_eval_exp);
 
                 // store that value on the stack
@@ -507,7 +527,7 @@ fn compile_to_instrs(
                 // bind id to that location on the stack (in doing so, to that result)
                 curr_let_binding.insert(id.to_string(), id_rsp_offset);
             }
-            
+
             let mut let_label_prefix = label_prefix.clone();
             let_label_prefix.push_str(&format!("_let{}", i).to_string());
 
@@ -532,28 +552,43 @@ fn compile_to_instrs(
             if_right_label_prefix.push_str("_if_right");
             let mut if_finish_label_prefix = label_prefix.clone();
             if_finish_label_prefix.push_str("_if_finish");
- 
+
             // Conditional Expression
-            let code_to_eval_expr = compile_to_instrs(expr, scope_bindings.clone(), rsp_offset, if_cond_label_prefix.clone());
+            let code_to_eval_expr = compile_to_instrs(
+                expr,
+                scope_bindings.clone(),
+                rsp_offset,
+                if_cond_label_prefix.clone(),
+            );
             instructions_to_compile_if.extend(code_to_eval_expr);
             instructions_to_compile_if.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1)));
             instructions_to_compile_if.push(Instr::JumpEqual(if_left_label_prefix.clone()));
-            
+
             // Right Branch
-            let code_to_eval_expr2 = compile_to_instrs(expr2, scope_bindings.clone(), rsp_offset, if_right_label_prefix.clone());
+            let code_to_eval_expr2 = compile_to_instrs(
+                expr2,
+                scope_bindings.clone(),
+                rsp_offset,
+                if_right_label_prefix.clone(),
+            );
             instructions_to_compile_if.extend(code_to_eval_expr2);
             instructions_to_compile_if.push(Instr::Jump(if_finish_label_prefix.clone()));
 
             // Left Branch
             instructions_to_compile_if.push(Instr::AddLabel(if_left_label_prefix.clone()));
-            let code_to_eval_expr1 = compile_to_instrs(expr1, scope_bindings.clone(), rsp_offset, if_left_label_prefix.clone());
+            let code_to_eval_expr1 = compile_to_instrs(
+                expr1,
+                scope_bindings.clone(),
+                rsp_offset,
+                if_left_label_prefix.clone(),
+            );
             instructions_to_compile_if.extend(code_to_eval_expr1);
-            
+
             // Finish
             instructions_to_compile_if.push(Instr::AddLabel(if_finish_label_prefix.clone()));
 
             instructions_to_compile_if
-        },
+        }
         Expr::RepeatUntil(expr, expr1) => todo!(),
         Expr::Set(_, expr) => todo!(),
         Expr::Block(vec) => todo!(),
@@ -576,6 +611,7 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::JumpLessEqual(label) => format!("\tjle {}", label.to_string()),
         Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
         Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
+        Instr::Ret => "\tret".to_string(),
     }
 }
 
@@ -609,18 +645,37 @@ fn compile(e: &Expr) -> String {
         ExprType::Bool => 0,
     };
 
-    let mut instrs = compile_to_instrs(e, im::HashMap::new(), 0, "our_code_starts_here".to_string());
-  
-    // Add Returning Instruction
+    // add the label for our code
+    let mut instrs = vec![Instr::AddLabel("our_code_starts_here".to_string())];
+
+    // compile the instructions which evaluate the expression, loading the result into rax
+    instrs.extend(compile_to_instrs(
+        e,
+        im::HashMap::new(),
+        0,
+        "our_code_starts_here".to_string(),
+    ));
+
+    // on a success, we fall through to here, and snek print is called
+    // move type flag (value given by typecheck) to rsi
     instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
+
+    // move the result (stored in rax) to rdi
     instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
+
+    // call SnekPrint (takes in rdi, the result, and rsi, the type)
     instrs.push(Instr::Call(Function::SnekPrint));
-    instrs.push(Instr::Jump("our_code_starts_here_done".to_string()));
+
+    // return after SnekPrint is called
+    instrs.push(Instr::Ret);
+
+    // on a failure, we jump here before reaching the SnekPrint call
     instrs.push(Instr::AddLabel("our_code_starts_here_overflow".to_string()));
     instrs.push(Instr::Call(Function::SnekError));
-    instrs.push(Instr::AddLabel("our_code_starts_here_done".to_string()));
-        
-    instrs.into_iter()
+    instrs.push(Instr::Ret);
+
+    instrs
+        .into_iter()
         .map(|instr| format!("  {}", instr_to_str(&instr)))
         .collect::<Vec<String>>()
         .join("\n")
@@ -654,7 +709,6 @@ extern snek_print
 extern snek_error
 
 global our_code_starts_here
-our_code_starts_here:
 {}
 ",
         result
