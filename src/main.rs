@@ -81,6 +81,9 @@ enum Expr {
 
 const SIZEOF_I_64: i32 = 8; // size of an integer in bytes
 
+const ENTRYPOINT_LABEL: &str = "our_code_starts_here";
+const OVERFLOW_LABEL: &str = "overflow";
+
 fn is_keyword(id: &str) -> bool {
     return vec![
         "true",
@@ -349,27 +352,24 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> ExprTyp
     }
 }
 
+fn increment_counter(counter: &mut i64) -> i64 {
+    *counter += 1;
+    *counter
+}
+
 fn compile_bin_op_to_instrs(
     op: &Op2,
     b: &Expr, // first arg
     a: &Expr, // second arg
     scope_bindings: im::HashMap<String, i32>,
     mut rsp_offset: i32,
-    label_prefix: String,
+    label_counter: &mut i64,
 ) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
-    let mut op2_left_label_prefix = label_prefix.clone();
-    op2_left_label_prefix.push_str("_op2_left");
-    let mut op2_right_label_prefix = label_prefix.clone();
-    op2_right_label_prefix.push_str("_op2_right");
 
     // compute the value of a into RAX
-    let instr_to_compute_a = compile_to_instrs(
-        a,
-        scope_bindings.clone(),
-        rsp_offset,
-        op2_left_label_prefix.clone(),
-    );
+    let instr_to_compute_a =
+        compile_to_instrs(a, scope_bindings.clone(), rsp_offset, label_counter);
     instr_to_compute_res.extend(instr_to_compute_a);
 
     // store that value on the stack
@@ -382,12 +382,7 @@ fn compile_bin_op_to_instrs(
 
     // this computes b, and stores it in RAX. since we adjusted rsp_offset,
     // our stored value of a is still at a_rsp_offset
-    let inst_to_compute_b = compile_to_instrs(
-        b,
-        scope_bindings.clone(),
-        rsp_offset,
-        op2_right_label_prefix.clone(),
-    );
+    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset, label_counter);
     instr_to_compute_res.extend(inst_to_compute_b);
 
     // now we have `a` at the memory location RSP + a_rsp_offset, and `b` in RAX
@@ -405,7 +400,7 @@ fn compile_bin_op_to_instrs(
             ));
             // Do Overflow Checking
             instr_to_compute_res.push(Instr::JumpOverflow(
-                "our_code_starts_here_overflow".to_string(),
+                String::from(OVERFLOW_LABEL),
             ));
         }
         _ => {
@@ -413,10 +408,10 @@ fn compile_bin_op_to_instrs(
                 Val::Reg(Reg::RAX),
                 Val::RegOffset(Reg::RSP, a_rsp_offset),
             ));
-            let mut compare_true = label_prefix.clone();
-            compare_true.push_str("_compare_true");
-            let mut compare_finish = label_prefix.clone();
-            compare_finish.push_str("_compare_finish");
+
+            let label_true = generate_label(increment_counter(label_counter));
+            let label_finish = generate_label(increment_counter(label_counter));
+
             instr_to_compute_res.push(match op {
                 Op2::Greater => Instr::JumpGreater,
                 Op2::GreaterEqual => Instr::JumpGreaterEqual,
@@ -424,17 +419,21 @@ fn compile_bin_op_to_instrs(
                 Op2::LessEqual => Instr::JumpLessEqual,
                 Op2::Less => Instr::JumpLess,
                 _ => panic!("Unexpected"),
-            }(compare_true.clone()));
+            }(label_true.clone()));
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));
-            instr_to_compute_res.push(Instr::Jump(compare_finish.clone()));
-            instr_to_compute_res.push(Instr::AddLabel(compare_true.clone()));
+            instr_to_compute_res.push(Instr::Jump(label_finish.clone()));
+            instr_to_compute_res.push(Instr::AddLabel(label_true.clone()));
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1)));
-            instr_to_compute_res.push(Instr::Jump(compare_finish.clone()));
-            instr_to_compute_res.push(Instr::AddLabel(compare_finish.clone()));
+            instr_to_compute_res.push(Instr::Jump(label_finish.clone()));
+            instr_to_compute_res.push(Instr::AddLabel(label_finish.clone()));
         }
     };
 
     instr_to_compute_res
+}
+
+fn generate_label(label_counter: i64) -> String {
+    return format!("{}_label_{}", ENTRYPOINT_LABEL, label_counter).to_string();
 }
 
 /// Produces a vector of instructions which, when executed, result in the value
@@ -444,7 +443,7 @@ fn compile_to_instrs(
     e: &Expr,
     scope_bindings: im::HashMap<String, i32>,
     rsp_offset: i32,
-    label_prefix: String,
+    label_counter: &mut i64,
 ) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
@@ -467,15 +466,8 @@ fn compile_to_instrs(
 
         // unary ops
         Expr::UnOp(op, exp) => {
-            let mut op1_label_prefix = label_prefix.clone();
-            op1_label_prefix.push_str("_op1");
-
-            let mut instructions = compile_to_instrs(
-                exp,
-                scope_bindings.clone(),
-                rsp_offset,
-                op1_label_prefix.clone(),
-            );
+            let mut instructions =
+                compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, label_counter);
 
             instructions.push(match op {
                 Op1::Add1 => Instr::IAdd,
@@ -486,7 +478,7 @@ fn compile_to_instrs(
 
         // binary ops: put op(b, a) in rax
         Expr::BinOp(op, b, a) => {
-            compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset, label_prefix.clone())
+            compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset, label_counter)
         }
 
         // let expression
@@ -496,7 +488,6 @@ fn compile_to_instrs(
             let mut curr_let_binding = scope_bindings;
             let mut in_this_let: im::HashSet<String> = im::HashSet::new();
             // evaluate in order using lexical scoping
-            let mut i = 0;
 
             for (id, exp) in bindings {
                 // check for duplicates
@@ -504,16 +495,10 @@ fn compile_to_instrs(
                     None => (),
                     Some(_) => panic!("Duplicate binding"),
                 };
-                let mut let_label_prefix = label_prefix.clone();
-                let_label_prefix.push_str(&format!("_let{}", i).to_string());
-                i += 1;
+
                 // compute the value of exp into RAX
-                let code_to_eval_exp = compile_to_instrs(
-                    exp,
-                    curr_let_binding.clone(),
-                    rsp_offset,
-                    let_label_prefix.clone(),
-                );
+                let code_to_eval_exp =
+                    compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset, label_counter);
                 instructions_to_compile_let.extend(code_to_eval_exp);
 
                 // store that value on the stack
@@ -528,15 +513,12 @@ fn compile_to_instrs(
                 curr_let_binding.insert(id.to_string(), id_rsp_offset);
             }
 
-            let mut let_label_prefix = label_prefix.clone();
-            let_label_prefix.push_str(&format!("_let{}", i).to_string());
-
             // evaluate the final expression after all the bindings into RAX
             instructions_to_compile_let.extend(compile_to_instrs(
                 final_expr,
                 curr_let_binding,
                 curr_rsp_offset,
-                let_label_prefix.clone(),
+                label_counter,
             ));
 
             instructions_to_compile_let
@@ -544,53 +526,47 @@ fn compile_to_instrs(
 
         Expr::If(expr, expr1, expr2) => {
             let mut instructions_to_compile_if: Vec<Instr> = vec![];
-            let mut if_cond_label_prefix = label_prefix.clone();
-            if_cond_label_prefix.push_str("_if_cond");
-            let mut if_left_label_prefix = label_prefix.clone();
-            if_left_label_prefix.push_str("_if_left");
-            let mut if_right_label_prefix = label_prefix.clone();
-            if_right_label_prefix.push_str("_if_right");
-            let mut if_finish_label_prefix = label_prefix.clone();
-            if_finish_label_prefix.push_str("_if_finish");
 
             // Conditional Expression
-            let code_to_eval_expr = compile_to_instrs(
-                expr,
-                scope_bindings.clone(),
-                rsp_offset,
-                if_cond_label_prefix.clone(),
-            );
+            let code_to_eval_expr =
+                compile_to_instrs(expr, scope_bindings.clone(), rsp_offset, label_counter);
             instructions_to_compile_if.extend(code_to_eval_expr);
             instructions_to_compile_if.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1)));
-            instructions_to_compile_if.push(Instr::JumpEqual(if_left_label_prefix.clone()));
+            let left_label = generate_label(increment_counter(label_counter));
+
+            instructions_to_compile_if.push(Instr::JumpEqual(left_label.clone()));
 
             // Right Branch
-            let code_to_eval_expr2 = compile_to_instrs(
-                expr2,
-                scope_bindings.clone(),
-                rsp_offset,
-                if_right_label_prefix.clone(),
-            );
+            let code_to_eval_expr2 =
+                compile_to_instrs(expr2, scope_bindings.clone(), rsp_offset, label_counter);
             instructions_to_compile_if.extend(code_to_eval_expr2);
-            instructions_to_compile_if.push(Instr::Jump(if_finish_label_prefix.clone()));
+
+            let if_finish_label = generate_label(increment_counter(label_counter));
+            instructions_to_compile_if.push(Instr::Jump(if_finish_label.clone()));
 
             // Left Branch
-            instructions_to_compile_if.push(Instr::AddLabel(if_left_label_prefix.clone()));
-            let code_to_eval_expr1 = compile_to_instrs(
-                expr1,
-                scope_bindings.clone(),
-                rsp_offset,
-                if_left_label_prefix.clone(),
-            );
+            instructions_to_compile_if.push(Instr::AddLabel(left_label.clone()));
+            let code_to_eval_expr1 =
+                compile_to_instrs(expr1, scope_bindings.clone(), rsp_offset, label_counter);
             instructions_to_compile_if.extend(code_to_eval_expr1);
 
             // Finish
-            instructions_to_compile_if.push(Instr::AddLabel(if_finish_label_prefix.clone()));
+            instructions_to_compile_if.push(Instr::AddLabel(if_finish_label.clone()));
 
             instructions_to_compile_if
         }
         Expr::RepeatUntil(expr, expr1) => todo!(),
-        Expr::Set(_, expr) => todo!(),
+        Expr::Set(identifier, expr) => {
+            // get the rsp offset where this variable is stored
+            let rsp_offset = match scope_bindings.get(identifier) {
+                None => panic!("{}", format!("Unbound variable identifier {}", identifier)),
+                Some(offset) => offset,
+            };
+
+            // get the asm instructions to compile
+
+            todo!()
+        }
         Expr::Block(vec) => todo!(),
     }
 }
@@ -646,14 +622,14 @@ fn compile(e: &Expr) -> String {
     };
 
     // add the label for our code
-    let mut instrs = vec![Instr::AddLabel("our_code_starts_here".to_string())];
-
+    let mut instrs = vec![Instr::AddLabel(ENTRYPOINT_LABEL.to_string())];
+    let mut label_counter: i64 = 0;
     // compile the instructions which evaluate the expression, loading the result into rax
     instrs.extend(compile_to_instrs(
         e,
         im::HashMap::new(),
         0,
-        "our_code_starts_here".to_string(),
+        &mut label_counter,
     ));
 
     // on a success, we fall through to here, and snek print is called
@@ -670,7 +646,7 @@ fn compile(e: &Expr) -> String {
     instrs.push(Instr::Ret);
 
     // on a failure, we jump here before reaching the SnekPrint call
-    instrs.push(Instr::AddLabel("our_code_starts_here_overflow".to_string()));
+    instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
     instrs.push(Instr::Call(Function::SnekError));
     instrs.push(Instr::Ret);
 
