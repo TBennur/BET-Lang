@@ -1,5 +1,5 @@
 use core::panic;
-use std::env;
+use std::{clone, env};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -399,9 +399,7 @@ fn compile_bin_op_to_instrs(
                 Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
             ));
             // Do Overflow Checking
-            instr_to_compute_res.push(Instr::JumpOverflow(
-                String::from(OVERFLOW_LABEL),
-            ));
+            instr_to_compute_res.push(Instr::JumpOverflow(String::from(OVERFLOW_LABEL)));
         }
         _ => {
             instr_to_compute_res.push(Instr::Compare(
@@ -555,19 +553,85 @@ fn compile_to_instrs(
 
             instructions_to_compile_if
         }
-        Expr::RepeatUntil(expr, expr1) => todo!(),
+
         Expr::Set(identifier, expr) => {
             // get the rsp offset where this variable is stored
-            let rsp_offset = match scope_bindings.get(identifier) {
+            let id_rsp_offset = match scope_bindings.get(identifier) {
                 None => panic!("{}", format!("Unbound variable identifier {}", identifier)),
-                Some(offset) => offset,
+                Some(offset) => *offset,
             };
 
-            // get the asm instructions to compile
+            // get the asm instructions to evaluate `expr` into rax
+            let mut instructions_to_compile_set: Vec<Instr> = vec![];
+            instructions_to_compile_set.extend(compile_to_instrs(
+                expr,
+                scope_bindings.clone(),
+                rsp_offset,
+                label_counter,
+            ));
 
-            todo!()
+            // add instruction to update value of set
+            instructions_to_compile_set.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, id_rsp_offset),
+                Val::Reg(Reg::RAX),
+            ));
+
+            // don't change the value in rax since the set expression evaluates to the new value
+
+            instructions_to_compile_set
         }
-        Expr::Block(vec) => todo!(),
+        Expr::Block(block) => {
+            if block.len() == 0 {
+                panic!("Invalid");
+            }
+
+            let mut instructions_to_compile_block: Vec<Instr> = vec![];
+
+            // compile each expression
+            for exp in block {
+                instructions_to_compile_block.extend(compile_to_instrs(
+                    exp,
+                    scope_bindings.clone(),
+                    rsp_offset,
+                    label_counter,
+                ));
+            }
+
+            // value of last expression in block is already in rax, so done
+            instructions_to_compile_block
+        }
+
+        Expr::RepeatUntil(body, stop_cond) => {
+            let mut instructions_to_compile_repeat_until: Vec<Instr> = vec![];
+            
+            // add label
+            let body_label = generate_label(increment_counter(label_counter));
+            instructions_to_compile_repeat_until.push(Instr::AddLabel(body_label.clone()));
+
+            // compile the body
+            instructions_to_compile_repeat_until.extend(compile_to_instrs(body, scope_bindings.clone(), rsp_offset, label_counter));
+
+            // push value of body (rax) onto stack
+            let id_rsp_offset = rsp_offset - SIZEOF_I_64;
+            instructions_to_compile_repeat_until.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, id_rsp_offset),
+                Val::Reg(Reg::RAX),
+            ));
+
+            // evaluate the stop condition, which moves its result into rax
+            instructions_to_compile_repeat_until.extend(compile_to_instrs(stop_cond, scope_bindings.clone(), id_rsp_offset, label_counter));
+
+            // compare the value of the stop_condition to 0; jump if it's equal to 0, ie, not stopped
+            instructions_to_compile_repeat_until.push(Instr::Compare(Val::Reg(Reg::RAX),Val::Imm(0)));
+            
+            // jump to body label if equal to 0
+            instructions_to_compile_repeat_until.push(Instr::JumpEqual(body_label.clone()));
+            
+            // move the stored value to rax
+            instructions_to_compile_repeat_until.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, id_rsp_offset)));            
+        
+            instructions_to_compile_repeat_until
+        },
     }
 }
 
