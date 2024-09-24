@@ -12,7 +12,7 @@ extern "C" {
 #[export_name = "\x01snek_error"]
 pub extern "C" fn snek_error(errcode: i64) {
     // TODO: print error message according to writeup
-    eprintln!("an error ocurred {errcode}");
+    eprintln!("overflow");
     std::process::exit(1);
 }
 

@@ -15,8 +15,8 @@ enum Function {
 #[derive(Debug)]
 enum Val {
     Reg(Reg),
-    Imm(i64),
-    RegOffset(Reg, i64),
+    Imm(i32),
+    RegOffset(Reg, i32),
 }
 
 #[derive(Debug)]
@@ -41,7 +41,8 @@ enum Instr {
     JumpGreaterEqual(String),
     JumpEqual(String),
     JumpLessEqual(String),
-    JumpLess(String)
+    JumpLess(String),
+    JumpOverflow(String)
 }
 
 #[derive(Debug)]
@@ -64,7 +65,7 @@ enum Op2 {
 
 #[derive(Debug)]
 enum Expr {
-    Number(i64),
+    Number(i32),
     Boolean(bool),
     Id(String),
     Let(Vec<(String, Expr)>, Box<Expr>),
@@ -76,6 +77,8 @@ enum Expr {
     Block(Vec<Expr>),
     Input,
 }
+
+const SIZEOF_I_64: i32 = 8; // size of an integer in bytes
 
 fn is_keyword(id: &str) -> bool {
     return vec![
@@ -103,7 +106,12 @@ fn id_to_string(id: &str) -> String {
 fn parse_expr(s: &Sexp) -> Expr {
     match s {
         // atoms
-        Sexp::Atom(I(n)) => Expr::Number(i64::try_from(*n).unwrap()),
+        Sexp::Atom(I(n)) => {
+            match <i32>::try_from(*n) {
+                Ok(num) => Expr::Number(num),
+                Err(err) => panic!("Invalid"),
+            }
+        },
         Sexp::Atom(S(id)) => match id.as_str() {
             "true" => Expr::Boolean(true),
             "false" => Expr::Boolean(false),
@@ -206,7 +214,6 @@ fn parse_expr(s: &Sexp) -> Expr {
     }
 }
 
-const SIZEOF_I_64: i64 = 8; // size of an integer in bytes
 
 #[derive(Clone, Copy, PartialEq)]
 enum ExprType {
@@ -349,8 +356,8 @@ fn compile_bin_op_to_instrs(
     op: &Op2,
     b: &Expr, // first arg
     a: &Expr, // second arg
-    scope_bindings: im::HashMap<String, i64>,
-    mut rsp_offset: i64,
+    scope_bindings: im::HashMap<String, i32>,
+    mut rsp_offset: i32,
     label_prefix: String,
 ) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
@@ -390,6 +397,7 @@ fn compile_bin_op_to_instrs(
                 Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
             ));
             // Do Overflow Checking
+            instr_to_compute_res.push(Instr::JumpOverflow("our_code_starts_here_overflow".to_string()));
         },
         _ => {
             instr_to_compute_res.push(Instr::Compare(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)));
@@ -424,8 +432,8 @@ fn compile_bin_op_to_instrs(
 /// rsp_offset is the next available position on rsp to be used for storing results
 fn compile_to_instrs(
     e: &Expr,
-    scope_bindings: im::HashMap<String, i64>,
-    rsp_offset: i64,
+    scope_bindings: im::HashMap<String, i32>,
+    rsp_offset: i32,
     label_prefix: String,
 ) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
@@ -437,7 +445,9 @@ fn compile_to_instrs(
             false => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
             true => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1))]
         },
-        Expr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
+        Expr::Number(x) => vec![
+            Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x)),
+        ],
 
         Expr::Id(identifier) => match scope_bindings.get(identifier) {
             None => panic!("{}", format!("Unbound variable identifier {}", identifier)),
@@ -565,6 +575,7 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::JumpEqual(label) => format!("\tje {}", label.to_string()),
         Instr::JumpLessEqual(label) => format!("\tjle {}", label.to_string()),
         Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
+        Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
     }
 }
 
@@ -593,7 +604,7 @@ fn val_to_str(v: &Val) -> String {
 }
 
 fn compile(e: &Expr) -> String {
-    let flag: i64 = match type_check(e, im::HashMap::new()) {
+    let flag: i32 = match type_check(e, im::HashMap::new()) {
         ExprType::Int => 1,
         ExprType::Bool => 0,
     };
@@ -604,6 +615,10 @@ fn compile(e: &Expr) -> String {
     instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
     instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
     instrs.push(Instr::Call(Function::SnekPrint));
+    instrs.push(Instr::Jump("our_code_starts_here_done".to_string()));
+    instrs.push(Instr::AddLabel("our_code_starts_here_overflow".to_string()));
+    instrs.push(Instr::Call(Function::SnekError));
+    instrs.push(Instr::AddLabel("our_code_starts_here_done".to_string()));
         
     instrs.into_iter()
         .map(|instr| format!("  {}", instr_to_str(&instr)))
@@ -636,6 +651,7 @@ fn main() -> std::io::Result<()> {
 section .text
 
 extern snek_print
+extern snek_error
 
 global our_code_starts_here
 our_code_starts_here:
