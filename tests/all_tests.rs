@@ -257,6 +257,12 @@ success_tests! {
 
     // Ensemble Tests
     {
+        name: big_negative_input,
+        file: "just_input.snek",
+        input: "-9223372036854775808",
+        expected: "-9223372036854775808",
+    },
+    {
         name: equal_bool_compound,
         file: "equal_bool_compound.snek",
         expected: "true",
@@ -276,6 +282,12 @@ success_tests! {
         file: "if_let.snek",
         expected: "5",
     },
+    {
+        name: ok_positive_input,
+        file: "just_input.snek",
+        input: "9223372036854775807",
+        expected: "9223372036854775807",
+    },
 }
 
 runtime_error_tests! {
@@ -283,6 +295,18 @@ runtime_error_tests! {
         name: mul_over,
         file: "mul_over.snek",
         expected: "overflow",
+    },
+    {
+        name: too_negative_input,
+        file: "just_input.snek",
+        input: "-9223372036854775809",
+        expected: "Invalid Input",
+    },
+    {
+        name: too_positive_input,
+        file: "just_input.snek",
+        input: "9223372036854775808",
+        expected: "Invalid Input",
     },
 }
 
