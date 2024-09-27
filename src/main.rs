@@ -1,5 +1,5 @@
 use core::panic;
-use std::{clone, env};
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -357,6 +357,10 @@ fn increment_counter(counter: &mut i64) -> i64 {
     *counter
 }
 
+fn generate_label(label_counter: i64) -> String {
+    return format!("{}_label_{}", ENTRYPOINT_LABEL, label_counter).to_string();
+}
+
 fn compile_bin_op_to_instrs(
     op: &Op2,
     b: &Expr, // first arg
@@ -430,13 +434,10 @@ fn compile_bin_op_to_instrs(
     instr_to_compute_res
 }
 
-fn generate_label(label_counter: i64) -> String {
-    return format!("{}_label_{}", ENTRYPOINT_LABEL, label_counter).to_string();
-}
-
 /// Produces a vector of instructions which, when executed, result in the value
 /// of the expression in RAX
-/// rsp_offset is the next available position on rsp to be used for storing results
+/// 
+/// `rsp_offset` is the next available position on rsp to be used for storing results
 fn compile_to_instrs(
     e: &Expr,
     scope_bindings: im::HashMap<String, i32>,
@@ -570,7 +571,7 @@ fn compile_to_instrs(
                 label_counter,
             ));
 
-            // add instruction to update value of set
+            // add instruction to update value of binding
             instructions_to_compile_set.push(Instr::IMov(
                 Val::RegOffset(Reg::RSP, id_rsp_offset),
                 Val::Reg(Reg::RAX),
@@ -604,7 +605,7 @@ fn compile_to_instrs(
         Expr::RepeatUntil(body, stop_cond) => {
             let mut instructions_to_compile_repeat_until: Vec<Instr> = vec![];
             
-            // add label
+            // add body label
             let body_label = generate_label(increment_counter(label_counter));
             instructions_to_compile_repeat_until.push(Instr::AddLabel(body_label.clone()));
 
@@ -624,7 +625,7 @@ fn compile_to_instrs(
             // compare the value of the stop_condition to 0; jump if it's equal to 0, ie, not stopped
             instructions_to_compile_repeat_until.push(Instr::Compare(Val::Reg(Reg::RAX),Val::Imm(0)));
             
-            // jump to body label if equal to 0
+            // jump to body label if equal to 0, ie, stopped
             instructions_to_compile_repeat_until.push(Instr::JumpEqual(body_label.clone()));
             
             // move the stored value to rax
@@ -687,8 +688,9 @@ fn compile(e: &Expr) -> String {
 
     // add the label for our code
     let mut instrs = vec![Instr::AddLabel(ENTRYPOINT_LABEL.to_string())];
-    let mut label_counter: i64 = 0;
+    
     // compile the instructions which evaluate the expression, loading the result into rax
+    let mut label_counter: i64 = 0;
     instrs.extend(compile_to_instrs(
         e,
         im::HashMap::new(),
@@ -709,7 +711,7 @@ fn compile(e: &Expr) -> String {
     // return after SnekPrint is called
     instrs.push(Instr::Ret);
 
-    // on a failure, we jump here before reaching the SnekPrint call
+    // a runtime error causes us to jump here before reaching the SnekPrint call
     instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
     instrs.push(Instr::Call(Function::SnekError));
     instrs.push(Instr::Ret);

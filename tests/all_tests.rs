@@ -230,6 +230,30 @@ success_tests! {
         file: "basic_block.snek",
         expected: "3",
     },
+    {
+        name: nested_loops_1,
+        file: "nested_loops.snek",
+        input: "1",
+        expected: "1",
+    },
+    {
+        name: nested_loops_2,
+        file: "nested_loops.snek",
+        input: "5",
+        expected: "125",
+    },
+    {
+        name: nested_loops_3,
+        file: "nested_loops.snek",
+        input: "0",
+        expected: "0",
+    },
+    {
+        name: nested_loops_4,
+        file: "nested_loops.snek",
+        input: "1000",
+        expected: "1000000000",
+    },
 
     // Ensemble Tests
     {

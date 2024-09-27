@@ -11,7 +11,6 @@ extern "C" {
 
 #[export_name = "\x01snek_error"]
 pub extern "C" fn snek_error(errcode: i64) {
-    // TODO: print error message according to writeup
     eprintln!("overflow");
     std::process::exit(1);
 }
@@ -32,9 +31,6 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64) {
     } else {
         println!("unknown flag");
     }
-
-
-    // TODO: print the value according to the writeup
 }
 
 fn parse_input(input: &str) -> u64 {
