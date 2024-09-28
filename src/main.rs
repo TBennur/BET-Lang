@@ -33,7 +33,6 @@ enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
-    BitwiseAnd(Val, Val),
     Compare(Val, Val),
     Call(Function),
     AddLabel(String),
@@ -643,7 +642,6 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::BitwiseAnd(dst, src) => format!("\tand {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
         Instr::AddLabel(label) => format!("{}:", label.to_string()),
@@ -705,9 +703,8 @@ fn compile(e: &Expr) -> String {
     instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
 
     // move the result (stored in rax) to rdi
-    // instrs.push(Instr::BitwiseAnd(Val::Reg(Reg::RSP), Val::Imm(-16)));
-    instrs.push(Instr::BitwiseAnd(Val::Reg(Reg::RSP), Val::Imm(-16))); // Force Alignment
     instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
+    instrs.push(Instr::ISub(Val::Reg(Reg::RSP), Val::Imm(8))); // Reset Alignment
     instrs.push(Instr::Call(Function::SnekPrint));
     instrs.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(8))); // Reset Alignment
     instrs.push(Instr::Ret);
