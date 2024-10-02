@@ -80,21 +80,6 @@ enum Expr {
     Input,
 }
 
-
-enum TypeExpr {
-    Number(i32),
-    Boolean(bool),
-    Id(String),
-    Let(Vec<(String, Expr)>, Box<Expr>),
-    UnOp(Op1, Box<Expr>),
-    BinOp(Op2, Box<Expr>, Box<Expr>),
-    If(Box<Expr>, Box<Expr>, Box<Expr>),
-    RepeatUntil(Box<Expr>, Box<Expr>),
-    Set(String, Box<Expr>),
-    Block(Vec<Expr>),
-    Input,
-}
-
 #[derive(Clone, Copy, PartialEq)]
 enum ExprType {
     Int,
@@ -362,7 +347,7 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
             // t * t => bool
             Op2::Equal => {
                 let a_typed_exprn = type_check(a, type_bindings.clone());
-                let b_typed_exprn = type_check(a, type_bindings.clone());
+                let b_typed_exprn = type_check(b, type_bindings.clone());
                 if extract_type(&a_typed_exprn) != extract_type(&b_typed_exprn) {
                     panic!("type mismatch");
                 }
