@@ -22,16 +22,15 @@ pub fn is_keyword(id: &str) -> bool {
         ">",
         "<=",
         "<",
-        // TODO: should we leave these as open?
-        // "int",
-        // "bool"
+        "int",
+        "bool"
     ]
     .contains(&id);
 }
 
 pub fn id_to_string(id: &str) -> String {
     if is_keyword(id) {
-        panic!("Invalid")
+        panic!("Invalid id {:?}", id)
     }
     id.to_string()
 }
@@ -42,6 +41,6 @@ pub fn type_str_to_expr_type(s: &String) -> ExprType {
     } else if s == "bool" {
         ExprType::Bool
     } else {
-        panic!("Invalid")
+        panic!("Invalid type {:?}", s)
     }
 }

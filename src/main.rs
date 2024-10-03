@@ -27,7 +27,7 @@ fn main() -> std::io::Result<()> {
     let parsed = &parse(&format!("({})", in_contents).to_string());
     let prog = match parsed {
         Ok(sexp) => parse::parse_program(sexp),
-        Err(_) => panic!("Invalid"),
+        Err(err) => panic!("Invalid: Parsing failed with error {:?}", err),
     };
 
     let result = compile_prog(&prog);

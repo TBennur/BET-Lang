@@ -8,7 +8,7 @@ fn parse_expr(s: &Sexp) -> Expr {
         // atoms
         Sexp::Atom(I(n)) => match <i32>::try_from(*n) {
             Ok(num) => Expr::Number(num),
-            Err(_) => panic!("Invalid"),
+            Err(err) => panic!("Invalid: Could not parse number, raised {:?} instead", err),
         },
         Sexp::Atom(S(id)) => match id.as_str() {
             "true" => Expr::Boolean(true),
@@ -28,7 +28,7 @@ fn parse_expr(s: &Sexp) -> Expr {
             // has the form block <expr>+
             [Sexp::Atom(S(op)), exprns @ ..] if op == "block" => {
                 if exprns.len() == 0 {
-                    panic!("Invalid")
+                    panic!("Invalid: Empty block")
                 } else {
                     Expr::Block(
                         exprns
@@ -63,7 +63,7 @@ fn parse_expr(s: &Sexp) -> Expr {
             // has the form let ((binding1), (binding2)) (in expression)
             [Sexp::Atom(S(op)), Sexp::List(bindings), finally] if op == "let" => {
                 if bindings.len() == 0 {
-                    panic!("Invalid")
+                    panic!("Invalid: Empty block")
                 } else {
                     Expr::Let(
                         bindings
@@ -71,9 +71,9 @@ fn parse_expr(s: &Sexp) -> Expr {
                             .map(|element| match element {
                                 Sexp::List(binding) => match &binding[..] {
                                     [Sexp::Atom(S(id)), e] => (id_to_string(id), parse_expr(e)),
-                                    _ => panic!("Invalid"),
+                                    s => panic!("Invalid: Improperly formed let binding {:?}", s),
                                 },
-                                _ => panic!("Invalid"),
+                                s => panic!("Invalid: Improperly formed let expression {:?}", s),
                             })
                             .collect(),
                         Box::new(parse_expr(finally)),
@@ -95,7 +95,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                     ">=" => Op2::GreaterEqual,
                     "<" => Op2::Less,
                     "<=" => Op2::LessEqual,
-                    _ => panic!("Invalid"),
+                    s => panic!("Invalid: Unknown binary operation {:?}", s),
                 },
                 Box::new(parse_expr(arg1)),
                 Box::new(parse_expr(arg2)),
@@ -107,30 +107,19 @@ fn parse_expr(s: &Sexp) -> Expr {
                     "add1" => Op1::Add1,
                     "sub1" => Op1::Sub1,
                     "print" => Op1::Print,
-                    _ => panic!("Invalid"),
+                    s => panic!("Invalid: Unknown unary operation {:?}", s),
                 },
                 Box::new(parse_expr(e)),
             ),
 
-            _ => panic!("Invalid"),
+            s => panic!("Invalid: Unknown vector expression {:?}", s),
         },
-        _ => panic!("Invalid"),
+        s => panic!("Invalid: Unknown atomic expression {:?}", s),
     }
 }
 
 fn parse_defn(s: &Sexp) -> UserFunction {
     match s {
-        /*
-            <defn> := (
-                fun
-                <name>
-                (
-                    (<name> <type>)*
-                )
-                <type>
-                <expr>
-            )
-        */
         Sexp::List(decl) => match &decl[..] {
             [Sexp::Atom(S(fun_keyword)), Sexp::Atom(S(fun_name)), Sexp::List(params), Sexp::Atom(S(ret_type)), fun_body]
                 if fun_keyword == "fun" =>
@@ -143,14 +132,14 @@ fn parse_defn(s: &Sexp) -> UserFunction {
                         Sexp::List(name_and_type) => match &name_and_type[..] {
                             [Sexp::Atom(S(name)), Sexp::Atom(S(param_type))] => {
                                 if is_keyword(name) {
-                                    panic!("Invalid")
+                                    panic!("Invalid: Parameter shares name with reserved keyword")
                                 }
                                 params_vec
                                     .push((type_str_to_expr_type(param_type), name.to_string()));
                             }
-                            _ => panic!("Invalid"),
+                            s => panic!("Invalid: Improperly formed parameter binding {:?}", s),
                         },
-                        _ => panic!("Invalid"),
+                        s => panic!("Invalid: Improperly formed parameter definition {:?}", s),
                     }
                 }
 
@@ -162,16 +151,16 @@ fn parse_defn(s: &Sexp) -> UserFunction {
                 )
             }
 
-            _ => panic!("Invalid"),
+            s => panic!("Invalid: Unknown vector expression {:?}", s),
         },
-        _ => panic!("Invalid"),
+        s => panic!("Invalid: Unknown atomic expression {:?}", s),
     }
 }
 
 pub fn parse_program(s: &Sexp) -> Prog {
     match s {
         Sexp::List(decl_and_body) => match decl_and_body.split_last() {
-            None => panic!("Invalid"),
+            None => panic!("Invalid: Malformed program"),
 
             Some((expr, defenitions)) => {
                 // leave checking if function is defined for later
@@ -181,6 +170,6 @@ pub fn parse_program(s: &Sexp) -> Prog {
                 )
             }
         },
-        _ => panic!("Invalid"), // TODO: more specific panic?
+        s => panic!("Invalid: Program is an atom expression {:?}", s),
     }
 }
