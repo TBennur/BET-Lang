@@ -11,7 +11,7 @@ success_tests! {
     {
         name: sophia_test_boa,
         file: "sophia_test.snek",
-        expected: "243",
+        expected: "243\n244",
     },
     {
         name: nested_arith1_boa,
@@ -287,6 +287,16 @@ success_tests! {
         file: "just_input.snek",
         input: "9223372036854775807",
         expected: "9223372036854775807",
+    },
+    {
+        name: print_int,
+        file: "print_int.snek",
+        expected: "5\n5",
+    },
+    {
+        name: print_bool,
+        file: "print_bool.snek",
+        expected: "true\ntrue",
     },
 }
 

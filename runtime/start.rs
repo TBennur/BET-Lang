@@ -19,7 +19,8 @@ const is_bool: u64 = 0;
 const is_int: u64 = 1;
 
 #[export_name = "\x01snek_print"]
-pub extern "C" fn snek_print(value: i64, type_flag: u64) {
+/// Changed snek_print to reflect the semantic meaning of print, which evaluates to the printed value
+pub extern "C" fn snek_print(value: i64, type_flag: u64) -> i64 {
     if type_flag == is_bool {
         if value == 0 {
             println!("false");
@@ -31,14 +32,15 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64) {
     } else {
         println!("unknown flag");
     }
+    value
 }
 
 fn parse_input(input: &str) -> u64 {
-   let inp: i64 = match input.parse::<i64>() {
+    let inp: i64 = match input.parse::<i64>() {
         Err(error) => panic!("Invalid Input"),
-        Ok(val) => val
-   };
-   inp as u64
+        Ok(val) => val,
+    };
+    inp as u64
 }
 
 fn main() {

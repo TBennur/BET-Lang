@@ -1,7 +1,7 @@
 use core::panic;
-use std::{env, vec};
 use std::fs::File;
 use std::io::prelude::*;
+use std::{env, vec};
 
 use sexp::Atom::*;
 use sexp::*;
@@ -92,14 +92,14 @@ enum TypedExpr {
     // Literal(Expr, ExprType)
     Number(i32),
     Boolean(bool),
-    Id(ExprType,String),
-    Let(ExprType,Vec<(String, TypedExpr)>, Box<TypedExpr>),
-    UnOp(ExprType,Op1, Box<TypedExpr>),
-    BinOp(ExprType,Op2, Box<TypedExpr>, Box<TypedExpr>),
-    If(ExprType,Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
-    RepeatUntil(ExprType,Box<TypedExpr>, Box<TypedExpr>),
-    Set(ExprType,String, Box<TypedExpr>),
-    Block(ExprType,Vec<TypedExpr>),
+    Id(ExprType, String),
+    Let(ExprType, Vec<(String, TypedExpr)>, Box<TypedExpr>),
+    UnOp(ExprType, Op1, Box<TypedExpr>),
+    BinOp(ExprType, Op2, Box<TypedExpr>, Box<TypedExpr>),
+    If(ExprType, Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
+    RepeatUntil(ExprType, Box<TypedExpr>, Box<TypedExpr>),
+    Set(ExprType, String, Box<TypedExpr>),
+    Block(ExprType, Vec<TypedExpr>),
     Input(ExprType),
     // Args(Vec<TypeExpr>)
 }
@@ -121,10 +121,13 @@ fn is_keyword(id: &str) -> bool {
         "if",
         "block",
         "repeat-until",
-        "print"
+        "print",
     ]
     .contains(&id);
 }
+
+const BOOL_TYPE_FLAG: i32 = 0;
+const INT_TYPE_FLAG: i32 = 1;
 
 fn id_to_string(id: &str) -> String {
     if is_keyword(id) {
@@ -245,7 +248,7 @@ fn parse_expr(s: &Sexp) -> Expr {
 
 fn extract_type(t: &TypedExpr) -> ExprType {
     match t {
-        TypedExpr::Number( _) => ExprType::Int,
+        TypedExpr::Number(_) => ExprType::Int,
         TypedExpr::Boolean(_) => ExprType::Bool,
         TypedExpr::Id(expr_type, _) => *expr_type,
         TypedExpr::Let(expr_type, _, _) => *expr_type,
@@ -271,20 +274,19 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
         },
         Expr::Number(n) => TypedExpr::Number(*n),
 
-        Expr::UnOp(op1, expr) =>  {
+        Expr::UnOp(op1, expr) => {
             let typed_expr = type_check(expr, type_bindings);
-            match op1  {
-                Op1::Add1 | Op1::Sub1 => {
-                    match extract_type(&typed_expr) {
-                        ExprType::Int => TypedExpr::UnOp(ExprType::Int, *op1, Box::new(typed_expr)),
-                        _ => panic!("type mismatch"),
-                    }
+            match op1 {
+                Op1::Add1 | Op1::Sub1 => match extract_type(&typed_expr) {
+                    ExprType::Int => TypedExpr::UnOp(ExprType::Int, *op1, Box::new(typed_expr)),
+                    _ => panic!("type mismatch"),
                 },
-                Op1::Print => TypedExpr::UnOp(extract_type(&typed_expr), *op1, Box::new(typed_expr)),
+                Op1::Print => {
+                    TypedExpr::UnOp(extract_type(&typed_expr), *op1, Box::new(typed_expr))
+                }
             }
-            
         }
-        
+
         Expr::Set(name, new_value) => {
             // fails if the name isn't in scope
             let t1 = *match type_bindings.get(name) {
@@ -325,7 +327,11 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
 
             // evaluate the type of the final expression after all the bindings
             let final_typed_expr = type_check(finally, curr_let_binding);
-            TypedExpr::Let(extract_type(&final_typed_expr), bindings_typed_exnr, Box::new(final_typed_expr))
+            TypedExpr::Let(
+                extract_type(&final_typed_expr),
+                bindings_typed_exnr,
+                Box::new(final_typed_expr),
+            )
         }
 
         Expr::BinOp(op2, a, b) => match op2 {
@@ -335,13 +341,18 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
                 if extract_type(&a_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
-                
+
                 let b_typed_exprn = type_check(b, type_bindings.clone());
                 if extract_type(&b_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
-                
-                TypedExpr::BinOp(ExprType::Int, *op2, Box::new(a_typed_exprn), Box::new(b_typed_exprn))
+
+                TypedExpr::BinOp(
+                    ExprType::Int,
+                    *op2,
+                    Box::new(a_typed_exprn),
+                    Box::new(b_typed_exprn),
+                )
             }
 
             // t * t => bool
@@ -351,8 +362,13 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
                 if extract_type(&a_typed_exprn) != extract_type(&b_typed_exprn) {
                     panic!("type mismatch");
                 }
-                
-                TypedExpr::BinOp(ExprType::Bool, *op2, Box::new(a_typed_exprn), Box::new(b_typed_exprn))
+
+                TypedExpr::BinOp(
+                    ExprType::Bool,
+                    *op2,
+                    Box::new(a_typed_exprn),
+                    Box::new(b_typed_exprn),
+                )
             }
 
             // int * int => bool
@@ -361,13 +377,18 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
                 if extract_type(&a_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
-                
+
                 let b_typed_exprn = type_check(b, type_bindings.clone());
                 if extract_type(&b_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
-                
-                TypedExpr::BinOp(ExprType::Bool, *op2, Box::new(a_typed_exprn), Box::new(b_typed_exprn))
+
+                TypedExpr::BinOp(
+                    ExprType::Bool,
+                    *op2,
+                    Box::new(a_typed_exprn),
+                    Box::new(b_typed_exprn),
+                )
             }
         },
 
@@ -382,7 +403,12 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
             let typed_if_true = type_check(val_if_true, type_bindings.clone());
             let typed_if_false = type_check(val_if_false, type_bindings.clone());
             if extract_type(&typed_if_true) == extract_type(&typed_if_false) {
-                TypedExpr::If(extract_type(&typed_if_true), Box::new(typed_cond), Box::new(typed_if_true), Box::new(typed_if_false))
+                TypedExpr::If(
+                    extract_type(&typed_if_true),
+                    Box::new(typed_cond),
+                    Box::new(typed_if_true),
+                    Box::new(typed_if_false),
+                )
             } else {
                 panic!("type mismatch")
             }
@@ -392,13 +418,17 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
         Expr::RepeatUntil(body, stop_cond) => {
             // stop_cond must be a bool
             let typed_stop_cond = type_check(stop_cond, type_bindings.clone());
-            if extract_type(&typed_stop_cond)!= ExprType::Bool {
+            if extract_type(&typed_stop_cond) != ExprType::Bool {
                 panic!("type mismatch")
             }
 
             // repeat-until evaluates to the body (once stop_cond is true)
             let typed_body = type_check(body, type_bindings.clone());
-            TypedExpr::RepeatUntil(extract_type(&typed_body), Box::new(typed_body.clone()), Box::new(typed_stop_cond.clone()))
+            TypedExpr::RepeatUntil(
+                extract_type(&typed_body),
+                Box::new(typed_body.clone()),
+                Box::new(typed_stop_cond.clone()),
+            )
         }
 
         Expr::Block(expns) => {
@@ -406,7 +436,7 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
                 panic!("invalid")
             }
             let mut block_typed_exprn: Vec<TypedExpr> = Vec::new();
-            
+
             let mut final_type = ExprType::Int; // arbitrary
             for expr in expns {
                 // typecheck each expression in the block
@@ -415,7 +445,7 @@ fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedEx
                 block_typed_exprn.push(typed_exprn.clone());
             }
             // since block evaluates to the type of the last expression, that's the type of the block
-            
+
             TypedExpr::Block(final_type, block_typed_exprn)
         }
     }
@@ -434,14 +464,21 @@ fn compute_aligned_rsp_offset(rsp_offset: i32) -> i32 {
     return (rsp_offset / 16) * 16 + 8;
 }
 
+fn type_to_flag(t: ExprType) -> i32 {
+    match t {
+        ExprType::Int => INT_TYPE_FLAG,
+        ExprType::Bool => BOOL_TYPE_FLAG,
+    }
+}
+
 fn compile_bin_op_to_instrs(
-        op: &Op2,
-        b: &TypedExpr, // first arg
-        a: &TypedExpr, // second arg
-        scope_bindings: im::HashMap<String, i32>,
-        mut rsp_offset: i32,
-        label_counter: &mut i64,
-    ) -> Vec<Instr> {
+    op: &Op2,
+    b: &TypedExpr, // first arg
+    a: &TypedExpr, // second arg
+    scope_bindings: im::HashMap<String, i32>,
+    mut rsp_offset: i32,
+    label_counter: &mut i64,
+) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
 
     // compute the value of a into RAX
@@ -509,14 +546,14 @@ fn compile_bin_op_to_instrs(
 
 /// Produces a vector of instructions which, when executed, result in the value
 /// of the expression in RAX
-/// 
+///
 /// `rsp_offset` is the next available position on rsp to be used for storing results
 fn compile_to_instrs(
-        e: &TypedExpr,
-        scope_bindings: im::HashMap<String, i32>,
-        rsp_offset: i32,
-        label_counter: &mut i64,
-    ) -> Vec<Instr> {
+    e: &TypedExpr,
+    scope_bindings: im::HashMap<String, i32>,
+    rsp_offset: i32,
+    label_counter: &mut i64,
+) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
     match e {
@@ -537,15 +574,29 @@ fn compile_to_instrs(
         },
 
         // unary ops
-        TypedExpr::UnOp(_, op, exp) => {
+        TypedExpr::UnOp(t, op, exp) => {
             let mut instructions =
                 compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, label_counter);
 
-            instructions.push(match op {
-                Op1::Add1 => Instr::IAdd,
-                Op1::Sub1 => Instr::ISub,
-                Op1::Print => todo!(),
-            }(Val::Reg(Reg::RAX), Val::Imm(1)));
+            match op {
+                Op1::Add1 => instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1))),
+                Op1::Sub1 => instructions.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1))),
+                Op1::Print => {
+                    let flag = type_to_flag(*t);
+
+                    instructions.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
+                    instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
+                    instructions.push(Instr::ISub(
+                        Val::Reg(Reg::RSP),
+                        Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
+                    )); // Reset Alignment
+                    instructions.push(Instr::Call(Function::SnekPrint));
+                    instructions.push(Instr::IAdd(
+                        Val::Reg(Reg::RSP),
+                        Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
+                    )); // Reset Alignment
+                }
+            };
             instructions
         }
 
@@ -678,13 +729,18 @@ fn compile_to_instrs(
 
         TypedExpr::RepeatUntil(_, body, stop_cond) => {
             let mut instructions_to_compile_repeat_until: Vec<Instr> = vec![];
-            
+
             // add body label
             let body_label = generate_label(increment_counter(label_counter));
             instructions_to_compile_repeat_until.push(Instr::AddLabel(body_label.clone()));
 
             // compile the body
-            instructions_to_compile_repeat_until.extend(compile_to_instrs(body, scope_bindings.clone(), rsp_offset, label_counter));
+            instructions_to_compile_repeat_until.extend(compile_to_instrs(
+                body,
+                scope_bindings.clone(),
+                rsp_offset,
+                label_counter,
+            ));
 
             // push value of body (rax) onto stack
             let id_rsp_offset = rsp_offset - SIZEOF_I_64;
@@ -694,19 +750,28 @@ fn compile_to_instrs(
             ));
 
             // evaluate the stop condition, which moves its result into rax
-            instructions_to_compile_repeat_until.extend(compile_to_instrs(stop_cond, scope_bindings.clone(), id_rsp_offset, label_counter));
+            instructions_to_compile_repeat_until.extend(compile_to_instrs(
+                stop_cond,
+                scope_bindings.clone(),
+                id_rsp_offset,
+                label_counter,
+            ));
 
             // compare the value of the stop_condition to 0; jump if it's equal to 0, ie, not stopped
-            instructions_to_compile_repeat_until.push(Instr::Compare(Val::Reg(Reg::RAX),Val::Imm(0)));
-            
+            instructions_to_compile_repeat_until
+                .push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0)));
+
             // jump to body label if equal to 0, ie, stopped
             instructions_to_compile_repeat_until.push(Instr::JumpEqual(body_label.clone()));
-            
+
             // move the stored value to rax
-            instructions_to_compile_repeat_until.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, id_rsp_offset)));            
-        
+            instructions_to_compile_repeat_until.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RSP, id_rsp_offset),
+            ));
+
             instructions_to_compile_repeat_until
-        },
+        }
     }
 }
 
@@ -778,10 +843,16 @@ fn compile(e: &Expr) -> String {
     instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
 
     // move the result (stored in rax) to rdi
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX)));
-    instrs.push(Instr::ISub(Val::Reg(Reg::RSP), Val::Imm(compute_aligned_rsp_offset(init_rsp_offset)))); // Reset Alignment
+    instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
+    instrs.push(Instr::ISub(
+        Val::Reg(Reg::RSP),
+        Val::Imm(compute_aligned_rsp_offset(init_rsp_offset)),
+    )); // Reset Alignment
     instrs.push(Instr::Call(Function::SnekPrint));
-    instrs.push(Instr::IAdd(Val::Reg(Reg::RSP), Val::Imm(compute_aligned_rsp_offset(init_rsp_offset)))); // Reset Alignment
+    instrs.push(Instr::IAdd(
+        Val::Reg(Reg::RSP),
+        Val::Imm(compute_aligned_rsp_offset(init_rsp_offset)),
+    )); // Reset Alignment
     instrs.push(Instr::Ret);
     // call SnekPrint (takes in rdi, the result, and rsi, the type)
     // instrs.push(Instr::Call(Function::SnekPrint));
