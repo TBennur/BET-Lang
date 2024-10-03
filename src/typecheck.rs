@@ -187,5 +187,6 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
 
             TypedExpr::Block(final_type, block_typed_exprn)
         }
+        Expr::Call(_, vec) => todo!(),
     }
 }

@@ -13,6 +13,17 @@ pub fn is_keyword(id: &str) -> bool {
         "block",
         "repeat-until",
         "print",
+        "+",
+        "-",
+        "*",
+        "=",
+        ">=",
+        ">",
+        "<=",
+        "<",
+        // TODO: should we leave these as open?
+        // "int",
+        // "bool"
     ]
     .contains(&id);
 }

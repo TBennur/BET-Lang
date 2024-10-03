@@ -324,7 +324,9 @@ fn compile_to_instrs(
             ));
 
             instructions_to_compile_repeat_until
-        }
+        },
+
+        TypedExpr::Call(_, _, _) => todo!(),
     }
 }
 

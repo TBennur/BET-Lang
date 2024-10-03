@@ -19,6 +19,14 @@ fn parse_expr(s: &Sexp) -> Expr {
 
         // vectors
         Sexp::List(vec) => match &vec[..] {
+            // assume any vector whose first element isn't a keyword is a call
+            [Sexp::Atom(S(fun_name)), args @ ..] if !is_keyword(fun_name) => 
+            {
+                Expr::Call(
+                    fun_name.to_string(),
+                    args.into_iter().map(parse_expr).collect(),
+                )
+            },
             // block
             // has the form block <expr>+
             [Sexp::Atom(S(op)), exprns @ ..] if op == "block" => {

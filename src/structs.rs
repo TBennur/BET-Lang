@@ -77,6 +77,7 @@ pub enum Expr {
     Set(String, Box<Expr>),
     Block(Vec<Expr>),
     Input,
+    Call(String, Vec<Expr>)
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -97,8 +98,8 @@ pub enum TypedExpr {
     RepeatUntil(ExprType, Box<TypedExpr>, Box<TypedExpr>),
     Set(ExprType, String, Box<TypedExpr>),
     Block(ExprType, Vec<TypedExpr>),
+    Call(ExprType, String, Vec<TypedExpr>), // ExprType is return type of call
     Input(ExprType),
-    // Args(Vec<TypeExpr>)
 }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {
@@ -114,5 +115,6 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         TypedExpr::Set(expr_type, _, _) => *expr_type,
         TypedExpr::Block(expr_type, _) => *expr_type,
         TypedExpr::Input(expr_type) => *expr_type,
+        TypedExpr::Call(expr_type, _, _) => *expr_type,
     }
 }
