@@ -295,6 +295,12 @@ success_tests! {
         expected: "true\ntrue",
     },
     {
+        name: diamondback_print_test,
+        file: "diamondback/print_test.snek",
+        input: "3",
+        expected: "5\n4\n3\n3",
+    },
+    {
         name: diamondback_sophia_test,
         file: "diamondback/sophia_test.snek",
         expected: "243\n244",

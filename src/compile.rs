@@ -1,8 +1,6 @@
-
-use crate::structs::*;
 use crate::consts::*;
+use crate::structs::*;
 use crate::typecheck::type_check_prog;
-
 
 pub fn type_to_flag(t: ExprType) -> i32 {
     match t {
@@ -16,8 +14,8 @@ fn increment_counter(counter: &mut i64) -> i64 {
     *counter
 }
 
-fn generate_label(label_counter: i64) -> String {
-    return format!("{}_label_{}", ENTRYPOINT_LABEL, label_counter).to_string();
+fn generate_label(label_name: &String, label_counter: i64) -> String {
+    return format!("{}_label_{}", label_name, label_counter);
 }
 
 fn compute_aligned_rsp_offset(rsp_offset: i32) -> i32 {
@@ -31,12 +29,18 @@ fn compile_bin_op_to_instrs(
     scope_bindings: im::HashMap<String, i32>,
     mut rsp_offset: i32,
     label_counter: &mut i64,
+    label_name: &String,
 ) -> Vec<Instr> {
     let mut instr_to_compute_res: Vec<Instr> = vec![];
 
     // compute the value of a into RAX
-    let instr_to_compute_a =
-        compile_to_instrs(a, scope_bindings.clone(), rsp_offset, label_counter);
+    let instr_to_compute_a = compile_expr_to_instrs(
+        a,
+        scope_bindings.clone(),
+        rsp_offset,
+        label_counter,
+        label_name,
+    );
     instr_to_compute_res.extend(instr_to_compute_a);
 
     // store that value on the stack
@@ -49,7 +53,13 @@ fn compile_bin_op_to_instrs(
 
     // this computes b, and stores it in RAX. since we adjusted rsp_offset,
     // our stored value of a is still at a_rsp_offset
-    let inst_to_compute_b = compile_to_instrs(b, scope_bindings.clone(), rsp_offset, label_counter);
+    let inst_to_compute_b = compile_expr_to_instrs(
+        b,
+        scope_bindings.clone(),
+        rsp_offset,
+        label_counter,
+        label_name,
+    );
     instr_to_compute_res.extend(inst_to_compute_b);
 
     // now we have `a` at the memory location RSP + a_rsp_offset, and `b` in RAX
@@ -74,8 +84,14 @@ fn compile_bin_op_to_instrs(
                 Val::RegOffset(Reg::RSP, a_rsp_offset),
             ));
 
-            let label_true = generate_label(increment_counter(label_counter));
-            let label_finish = generate_label(increment_counter(label_counter));
+            let label_true = generate_label(
+                label_name,
+                increment_counter(label_counter),
+            );
+            let label_finish = generate_label(
+                label_name,
+                increment_counter(label_counter),
+            );
 
             instr_to_compute_res.push(match op {
                 Op2::Greater => Instr::JumpGreater,
@@ -101,11 +117,12 @@ fn compile_bin_op_to_instrs(
 /// of the expression in RAX
 ///
 /// `rsp_offset` is the next available position on rsp to be used for storing results
-fn compile_to_instrs(
+fn compile_expr_to_instrs(
     e: &TypedExpr,
     scope_bindings: im::HashMap<String, i32>,
     rsp_offset: i32,
     label_counter: &mut i64,
+    label_name: &String,
 ) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
@@ -128,8 +145,13 @@ fn compile_to_instrs(
 
         // unary ops
         TypedExpr::UnOp(t, op, exp) => {
-            let mut instructions =
-                compile_to_instrs(exp, scope_bindings.clone(), rsp_offset, label_counter);
+            let mut instructions = compile_expr_to_instrs(
+                exp,
+                scope_bindings.clone(),
+                rsp_offset,
+                label_counter,
+                label_name,
+            );
 
             match op {
                 Op1::Add1 => instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1))),
@@ -154,9 +176,15 @@ fn compile_to_instrs(
         }
 
         // binary ops: put op(b, a) in rax
-        TypedExpr::BinOp(_, op, b, a) => {
-            compile_bin_op_to_instrs(op, b, a, scope_bindings, rsp_offset, label_counter)
-        }
+        TypedExpr::BinOp(_, op, b, a) => compile_bin_op_to_instrs(
+            op,
+            b,
+            a,
+            scope_bindings,
+            rsp_offset,
+            label_counter,
+            label_name,
+        ),
 
         // let expression
         TypedExpr::Let(_, bindings, final_expr) => {
@@ -174,8 +202,13 @@ fn compile_to_instrs(
                 };
 
                 // compute the value of exp into RAX
-                let code_to_eval_exp =
-                    compile_to_instrs(exp, curr_let_binding.clone(), rsp_offset, label_counter);
+                let code_to_eval_exp = compile_expr_to_instrs(
+                    exp,
+                    curr_let_binding.clone(),
+                    rsp_offset,
+                    label_counter,
+                    label_name,
+                );
                 instructions_to_compile_let.extend(code_to_eval_exp);
 
                 // store that value on the stack
@@ -191,11 +224,12 @@ fn compile_to_instrs(
             }
 
             // evaluate the final expression after all the bindings into RAX
-            instructions_to_compile_let.extend(compile_to_instrs(
+            instructions_to_compile_let.extend(compile_expr_to_instrs(
                 final_expr,
                 curr_let_binding,
                 curr_rsp_offset,
                 label_counter,
+                label_name,
             ));
 
             instructions_to_compile_let
@@ -205,26 +239,41 @@ fn compile_to_instrs(
             let mut instructions_to_compile_if: Vec<Instr> = vec![];
 
             // Conditional Expression
-            let code_to_eval_expr =
-                compile_to_instrs(expr, scope_bindings.clone(), rsp_offset, label_counter);
+            let code_to_eval_expr = compile_expr_to_instrs(
+                expr,
+                scope_bindings.clone(),
+                rsp_offset,
+                label_counter,
+                label_name,
+            );
             instructions_to_compile_if.extend(code_to_eval_expr);
             instructions_to_compile_if.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1)));
-            let left_label = generate_label(increment_counter(label_counter));
+            let left_label = generate_label(label_name, increment_counter(label_counter));
 
             instructions_to_compile_if.push(Instr::JumpEqual(left_label.clone()));
 
             // Right Branch
-            let code_to_eval_expr2 =
-                compile_to_instrs(expr2, scope_bindings.clone(), rsp_offset, label_counter);
+            let code_to_eval_expr2 = compile_expr_to_instrs(
+                expr2,
+                scope_bindings.clone(),
+                rsp_offset,
+                label_counter,
+                label_name,
+            );
             instructions_to_compile_if.extend(code_to_eval_expr2);
 
-            let if_finish_label = generate_label(increment_counter(label_counter));
+            let if_finish_label = generate_label(label_name, increment_counter(label_counter));
             instructions_to_compile_if.push(Instr::Jump(if_finish_label.clone()));
 
             // Left Branch
             instructions_to_compile_if.push(Instr::AddLabel(left_label.clone()));
-            let code_to_eval_expr1 =
-                compile_to_instrs(expr1, scope_bindings.clone(), rsp_offset, label_counter);
+            let code_to_eval_expr1 = compile_expr_to_instrs(
+                expr1,
+                scope_bindings.clone(),
+                rsp_offset,
+                label_counter,
+                label_name,
+            );
             instructions_to_compile_if.extend(code_to_eval_expr1);
 
             // Finish
@@ -242,11 +291,12 @@ fn compile_to_instrs(
 
             // get the asm instructions to evaluate `expr` into rax
             let mut instructions_to_compile_set: Vec<Instr> = vec![];
-            instructions_to_compile_set.extend(compile_to_instrs(
+            instructions_to_compile_set.extend(compile_expr_to_instrs(
                 expr,
                 scope_bindings.clone(),
                 rsp_offset,
                 label_counter,
+                label_name,
             ));
 
             // add instruction to update value of binding
@@ -268,11 +318,12 @@ fn compile_to_instrs(
 
             // compile each expression
             for exp in block {
-                instructions_to_compile_block.extend(compile_to_instrs(
+                instructions_to_compile_block.extend(compile_expr_to_instrs(
                     exp,
                     scope_bindings.clone(),
                     rsp_offset,
                     label_counter,
+                    label_name,
                 ));
             }
 
@@ -284,15 +335,16 @@ fn compile_to_instrs(
             let mut instructions_to_compile_repeat_until: Vec<Instr> = vec![];
 
             // add body label
-            let body_label = generate_label(increment_counter(label_counter));
+            let body_label = generate_label(label_name, increment_counter(label_counter));
             instructions_to_compile_repeat_until.push(Instr::AddLabel(body_label.clone()));
 
             // compile the body
-            instructions_to_compile_repeat_until.extend(compile_to_instrs(
+            instructions_to_compile_repeat_until.extend(compile_expr_to_instrs(
                 body,
                 scope_bindings.clone(),
                 rsp_offset,
                 label_counter,
+                label_name,
             ));
 
             // push value of body (rax) onto stack
@@ -303,11 +355,12 @@ fn compile_to_instrs(
             ));
 
             // evaluate the stop condition, which moves its result into rax
-            instructions_to_compile_repeat_until.extend(compile_to_instrs(
+            instructions_to_compile_repeat_until.extend(compile_expr_to_instrs(
                 stop_cond,
                 scope_bindings.clone(),
                 id_rsp_offset,
                 label_counter,
+                label_name,
             ));
 
             // compare the value of the stop_condition to 0; jump if it's equal to 0, ie, not stopped
@@ -324,7 +377,7 @@ fn compile_to_instrs(
             ));
 
             instructions_to_compile_repeat_until
-        },
+        }
 
         TypedExpr::Call(_, _, _) => todo!(),
     }
@@ -374,60 +427,68 @@ fn val_to_str(v: &Val) -> String {
     }
 }
 
-fn compile_expr(typed_e: &TypedExpr) -> String {
-    let flag: i32 = match extract_type(&typed_e) {
-        ExprType::Int => 1,
-        ExprType::Bool => 0,
-    };
-
+fn compile_expr(typed_e: &TypedExpr, label_name: &String) -> Vec<Instr> {
     // add the label for our code
-    let mut instrs = vec![Instr::AddLabel(ENTRYPOINT_LABEL.to_string())];
-    let init_rsp_offset = 0;
-    // compile the instructions which evaluate the expression, loading the result into rax
+    let mut instrs = vec![Instr::AddLabel(label_name.to_string())];
+    let init_rsp_offset = 0; // TODO
+                             // compile the instructions which evaluate the expression, loading the result into rax
     let mut label_counter: i64 = 0;
-    instrs.extend(compile_to_instrs(
+    instrs.extend(compile_expr_to_instrs(
         &typed_e,
         im::HashMap::new(),
         init_rsp_offset,
         &mut label_counter,
+        label_name,
     ));
 
+    instrs
+}
+
+fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
+    todo!()
+    // Prep arguments
+    //
+}
+
+pub fn compile_prog(p: &Prog) -> String {
+    let TypedProg::Program(body_type, _, typed_e) = type_check_prog(p);
+
+    // let mut rsp_offset = 0;
+
+    let mut all_instrs = Vec::new();
+
+    // // Push input to be the "first argument" to "main" (body of program)
+    // all_instrs.push(Instr::ISub(Val::Reg(Reg::RSP), Val::Imm(SIZEOF_I_64)));
+    // all_instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, 0), Val::Reg(Reg::RDI)));
+
+    // compile program body, with the entrypoint label
+    all_instrs.extend(compile_expr(&typed_e, &ENTRYPOINT_LABEL.to_string()));
+
     // on a success, we fall through to here, and snek print is called
+
     // move type flag (value given by typecheck) to rsi
-    instrs.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
+    all_instrs.push(Instr::IMov(
+        Val::Reg(Reg::RSI),
+        Val::Imm(type_to_flag(body_type)),
+    ));
 
     // move the result (stored in rax) to rdi
-    instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
-    instrs.push(Instr::ISub(
-        Val::Reg(Reg::RSP),
-        Val::Imm(compute_aligned_rsp_offset(init_rsp_offset)),
-    )); // Reset Alignment
-    instrs.push(Instr::Call(Function::SnekPrint));
-    instrs.push(Instr::IAdd(
-        Val::Reg(Reg::RSP),
-        Val::Imm(compute_aligned_rsp_offset(init_rsp_offset)),
-    )); // Reset Alignment
-    instrs.push(Instr::Ret);
+    all_instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
+
     // call SnekPrint (takes in rdi, the result, and rsi, the type)
-    // instrs.push(Instr::Call(Function::SnekPrint));
+    all_instrs.push(Instr::Call(Function::SnekPrint));
 
     // return after SnekPrint is called
+    all_instrs.push(Instr::Ret);
 
     // a runtime error causes us to jump here before reaching the SnekPrint call
-    instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
-    instrs.push(Instr::Call(Function::SnekError));
-    instrs.push(Instr::Ret);
+    all_instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
+    all_instrs.push(Instr::Call(Function::SnekError));
+    all_instrs.push(Instr::Ret);
 
-    instrs
+    all_instrs
         .into_iter()
         .map(|instr| format!("  {}", instr_to_str(&instr)))
         .collect::<Vec<String>>()
         .join("\n")
-}
-
-pub fn compile_prog(p: &Prog) -> String {
-    let typed_p = type_check_prog(p);
-    match typed_p {
-        TypedProg::Program(_, _, typed_e) => compile_expr(&typed_e),
-    }
 }
