@@ -7,9 +7,15 @@ use sexp::Atom::*;
 use sexp::*;
 
 #[derive(Debug)]
+enum Prog {
+    Program(Vec<Function>, Expr),
+}
+
+#[derive(Debug)]
 enum Function {
     SnekPrint,
     SnekError,
+    UserFun(String, Vec<(ExprType, String)>, ExprType, Expr),
 }
 
 #[derive(Debug)]
@@ -80,7 +86,7 @@ enum Expr {
     Input,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum ExprType {
     Int,
     Bool,
@@ -102,6 +108,22 @@ enum TypedExpr {
     Block(ExprType, Vec<TypedExpr>),
     Input(ExprType),
     // Args(Vec<TypeExpr>)
+}
+
+fn extract_type(t: &TypedExpr) -> ExprType {
+    match t {
+        TypedExpr::Number(_) => ExprType::Int,
+        TypedExpr::Boolean(_) => ExprType::Bool,
+        TypedExpr::Id(expr_type, _) => *expr_type,
+        TypedExpr::Let(expr_type, _, _) => *expr_type,
+        TypedExpr::UnOp(expr_type, _, _) => *expr_type,
+        TypedExpr::BinOp(expr_type, _, _, _) => *expr_type,
+        TypedExpr::If(expr_type, _, _, _) => *expr_type,
+        TypedExpr::RepeatUntil(expr_type, _, _) => *expr_type,
+        TypedExpr::Set(expr_type, _, _) => *expr_type,
+        TypedExpr::Block(expr_type, _) => *expr_type,
+        TypedExpr::Input(expr_type) => *expr_type,
+    }
 }
 
 const SIZEOF_I_64: i32 = 8; // size of an integer in bytes
@@ -246,19 +268,77 @@ fn parse_expr(s: &Sexp) -> Expr {
     }
 }
 
-fn extract_type(t: &TypedExpr) -> ExprType {
-    match t {
-        TypedExpr::Number(_) => ExprType::Int,
-        TypedExpr::Boolean(_) => ExprType::Bool,
-        TypedExpr::Id(expr_type, _) => *expr_type,
-        TypedExpr::Let(expr_type, _, _) => *expr_type,
-        TypedExpr::UnOp(expr_type, _, _) => *expr_type,
-        TypedExpr::BinOp(expr_type, _, _, _) => *expr_type,
-        TypedExpr::If(expr_type, _, _, _) => *expr_type,
-        TypedExpr::RepeatUntil(expr_type, _, _) => *expr_type,
-        TypedExpr::Set(expr_type, _, _) => *expr_type,
-        TypedExpr::Block(expr_type, _) => *expr_type,
-        TypedExpr::Input(expr_type) => *expr_type,
+fn parse_program(s: &Sexp) -> Prog {
+    match s {
+        Sexp::List(decl_and_body) => match decl_and_body.split_last() {
+            None => panic!("Invalid"),
+
+            Some((expr, defenitions)) => {
+                // leave checking if function is defined for later
+                Prog::Program(
+                    defenitions.into_iter().map(parse_defn).collect(),
+                    parse_expr(expr),
+                )
+            }
+        },
+        _ => panic!("Invalid"), // TODO: more specific panic?
+    }
+}
+
+fn type_str_to_expr_type(s: &String) -> ExprType {
+    if s == "int" {
+        ExprType::Int
+    } else if s == "bool" {
+        ExprType::Bool
+    } else {
+        panic!("Invalid")
+    }
+}
+
+fn parse_defn(s: &Sexp) -> Function {
+    match s {
+        /*
+            <defn> := (
+                fun
+                <name>
+                (
+                    (<name> <type>)*
+                )
+                <type>
+                <expr>
+            )
+        */
+        Sexp::List(decl) => match &decl[..] {
+            [Sexp::Atom(S(fun_keyword)), Sexp::Atom(S(fun_name)), Sexp::List(params), Sexp::Atom(S(ret_type)), fun_body]
+                if fun_keyword == "fun" =>
+            {
+                let ret_type = type_str_to_expr_type(ret_type);
+
+                let mut params_vec: Vec<(ExprType, String)> = Vec::new();
+                for param_sexp in params {
+                    match param_sexp {
+                        Sexp::List(name_and_type) => match &name_and_type[..] {
+                            [Sexp::Atom(S(name)), Sexp::Atom(S(param_type))] => {
+                                params_vec
+                                    .push((type_str_to_expr_type(param_type), name.to_string()));
+                            }
+                            _ => panic!("Invalid"),
+                        },
+                        _ => panic!("Invalid"),
+                    }
+                }
+
+                Function::UserFun(
+                    fun_name.to_string(),
+                    params_vec,
+                    ret_type,
+                    parse_expr(fun_body),
+                )
+            }
+
+            _ => panic!("Invalid"),
+        },
+        _ => panic!("Invalid"),
     }
 }
 
@@ -799,6 +879,7 @@ fn fn_to_str(f: &Function) -> String {
     match f {
         Function::SnekPrint => "snek_print".to_string(),
         Function::SnekError => "snek_error".to_string(),
+        Function::UserFun(name, _, _, _) => name.to_string(),
     }
 }
 
@@ -819,7 +900,7 @@ fn val_to_str(v: &Val) -> String {
     }
 }
 
-fn compile(e: &Expr) -> String {
+fn compile_expr(e: &Expr) -> String {
     let typed_e = type_check(e, im::HashMap::new());
     let flag: i32 = match extract_type(&typed_e) {
         ExprType::Int => 1,
@@ -871,6 +952,12 @@ fn compile(e: &Expr) -> String {
         .join("\n")
 }
 
+fn compile_prog(p: &Prog) -> String {
+    match p {
+        Prog::Program(_, expr) => compile_expr(&expr)
+    }
+}
+
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
 
@@ -881,13 +968,13 @@ fn main() -> std::io::Result<()> {
     let mut in_contents = String::new();
     in_file.read_to_string(&mut in_contents)?;
 
-    let parsed = &parse(&in_contents);
-    let expr = match parsed {
-        Ok(sexp) => parse_expr(sexp),
+    let parsed = &parse(&format!("({})", in_contents).to_string());
+    let prog = match parsed {
+        Ok(sexp) => parse_program(sexp),
         Err(_) => panic!("Invalid"),
     };
 
-    let result = compile(&expr);
+    let result = compile_prog(&prog);
 
     // println!("Expected: {}", compute(&expr));
 
