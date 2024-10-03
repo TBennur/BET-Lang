@@ -2,6 +2,7 @@ use crate::structs::*;
 
 pub fn is_keyword(id: &str) -> bool {
     return vec![
+        "fun",
         "true",
         "false",
         "input",
