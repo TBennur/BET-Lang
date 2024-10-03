@@ -142,6 +142,9 @@ fn parse_defn(s: &Sexp) -> UserFunction {
                     match param_sexp {
                         Sexp::List(name_and_type) => match &name_and_type[..] {
                             [Sexp::Atom(S(name)), Sexp::Atom(S(param_type))] => {
+                                if is_keyword(name) {
+                                    panic!("Invalid")
+                                }
                                 params_vec
                                     .push((type_str_to_expr_type(param_type), name.to_string()));
                             }

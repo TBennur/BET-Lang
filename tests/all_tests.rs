@@ -352,4 +352,10 @@ static_error_tests! {
         file: "cobra/failed_set.snek",
         expected: "mismatch",
     },
+    {
+        name: diamondback_duplicate_params,
+        file: "diamondback/duplicate_params.snek",
+        expected: "Duplicate Argument",
+    },
+
 }
