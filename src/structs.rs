@@ -100,7 +100,7 @@ pub enum TypedExpr {
     Input(ExprType),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FunSignature {
     // to insert into function signature hashmap, for type_check_expr
     UserFun(ExprType, Vec<(ExprType, String)>),
@@ -108,7 +108,7 @@ pub enum FunSignature {
 
 pub enum TypedFunction {
     // for use in a program
-    UserFun(String, ExprType, Vec<(ExprType, String)>, TypedExpr),
+    UserFun(String, FunSignature, TypedExpr),
 }
 
 pub enum TypedProg {
@@ -117,7 +117,7 @@ pub enum TypedProg {
 
 #[derive(Debug)]
 pub enum UserFunction {
-    UserFun(String, Vec<(ExprType, String)>, ExprType, Expr),
+    UserFun(String, FunSignature, Expr),
 }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {

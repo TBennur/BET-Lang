@@ -61,7 +61,7 @@ fn compile_bin_op_to_instrs(
                 Op2::Minus => Instr::ISub,
                 Op2::Plus => Instr::IAdd,
                 Op2::Times => Instr::IMul,
-                _ => panic!("Unexpected"),
+                _ => panic!("Unexpected: This should never be called"),
             }(
                 Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
             ));
@@ -83,7 +83,7 @@ fn compile_bin_op_to_instrs(
                 Op2::Equal => Instr::JumpEqual,
                 Op2::LessEqual => Instr::JumpLessEqual,
                 Op2::Less => Instr::JumpLess,
-                _ => panic!("Unexpected"),
+                _ => panic!("Unexpected: This should never be called"),
             }(label_true.clone()));
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));
             instr_to_compute_res.push(Instr::Jump(label_finish.clone()));
@@ -119,7 +119,7 @@ fn compile_to_instrs(
         TypedExpr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
 
         TypedExpr::Id(_, identifier) => match scope_bindings.get(identifier) {
-            None => panic!("{}", format!("Unbound variable identifier {}", identifier)),
+            None => panic!("Unbound variable identifier {:?}", identifier),
             Some(offset) => vec![Instr::IMov(
                 Val::Reg(Reg::RAX),
                 Val::RegOffset(Reg::RSP, *offset),
@@ -236,7 +236,7 @@ fn compile_to_instrs(
         TypedExpr::Set(_, identifier, expr) => {
             // get the rsp offset where this variable is stored
             let id_rsp_offset = match scope_bindings.get(identifier) {
-                None => panic!("{}", format!("Unbound variable identifier {}", identifier)),
+                None => panic!("Unbound variable identifier {:?}", identifier),
                 Some(offset) => *offset,
             };
 
@@ -261,7 +261,7 @@ fn compile_to_instrs(
         }
         TypedExpr::Block(_, block) => {
             if block.len() == 0 {
-                panic!("Invalid");
+                panic!("Invalid: Empty Block");
             }
 
             let mut instructions_to_compile_block: Vec<Instr> = vec![];

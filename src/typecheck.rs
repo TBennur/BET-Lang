@@ -9,13 +9,10 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
             let mut function_sigs: HashMap<String, FunSignature> = im::HashMap::new();
             for function in functions {
                 match function {
-                    UserFunction::UserFun(name, param_types, ret_type, _) => {
-                        let function_sig = FunSignature::UserFun(*ret_type, param_types.to_vec());
-                        match function_sigs.get(name) {
-                            Some(_) => panic!("Duplicate Function Definition"), // TODO
-                            None => function_sigs.insert(name.to_string(), function_sig),
-                        }
-                    }
+                    UserFunction::UserFun(name, function_sig, _) => match function_sigs.get(name) {
+                        Some(_) => panic!("Duplicate Function Definition"),
+                        None => function_sigs.insert(name.to_string(), function_sig.to_owned()),
+                    },
                 };
             }
 
@@ -24,12 +21,16 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
             // typecheck each function
             for function in functions {
                 let typed_function = match function {
-                    UserFunction::UserFun(name, param_types, ret_type, body) => {
+                    UserFunction::UserFun(
+                        name,
+                        FunSignature::UserFun(ret_type, param_types),
+                        body,
+                    ) => {
                         // insert args into type bindings
                         let mut type_bindings: HashMap<String, ExprType> = im::HashMap::new();
                         for (param_type, param_name) in param_types {
                             match type_bindings.get(param_name) {
-                                Some(_) => panic!("Duplicate Argument"), // TODO error naming
+                                Some(_) => panic!("Duplicate Argument"),
                                 None => type_bindings.insert(param_name.to_string(), *param_type),
                             };
                         }
@@ -40,13 +41,15 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
                         // compare to signature type
                         if *ret_type != extract_type(&type_checked_body) {
-                            panic!("Mismatched function signature & body"); // TODO: error naming
+                            panic!("mismatched function signature & body");
                         }
 
                         TypedFunction::UserFun(
                             name.to_string(),
-                            extract_type(&type_checked_body),
-                            param_types.to_vec(),
+                            FunSignature::UserFun(
+                                extract_type(&type_checked_body),
+                                param_types.to_vec(),
+                            ),
                             type_checked_body,
                         )
                     }
@@ -73,14 +76,14 @@ fn type_check_expr(
             if allow_input {
                 TypedExpr::Input(ExprType::Int)
             } else {
-                panic!("Invalid")
+                panic!("Invalid: Input is not an Int")
             }
         }
 
         Expr::Boolean(b) => TypedExpr::Boolean(*b),
 
         Expr::Id(id) => match type_bindings.get(id) {
-            None => panic!("Invalid"),
+            None => panic!("Invalid: Nonexistent binding in Id"),
             Some(t) => TypedExpr::Id(*t, id.clone()),
         },
         Expr::Number(n) => TypedExpr::Number(*n),
@@ -91,7 +94,7 @@ fn type_check_expr(
             match op1 {
                 Op1::Add1 | Op1::Sub1 => match extract_type(&typed_expr) {
                     ExprType::Int => TypedExpr::UnOp(ExprType::Int, *op1, Box::new(typed_expr)),
-                    _ => panic!("type mismatch"),
+                    _ => panic!("Type mismatch in UnOp"),
                 },
                 Op1::Print => {
                     TypedExpr::UnOp(extract_type(&typed_expr), *op1, Box::new(typed_expr))
@@ -103,7 +106,7 @@ fn type_check_expr(
             // fails if the name isn't in scope
             let t1 = *match type_bindings.get(name) {
                 Some(t1) => t1,
-                None => panic!("Invalid"),
+                None => panic!("Invalid: Non-existent binding in set"),
             };
 
             // can only "set" a variable to the same type within the current scope
@@ -114,7 +117,7 @@ fn type_check_expr(
                 allow_input,
             );
             if extract_type(&t1_prime) != t1 {
-                panic!("type mismatch")
+                panic!("Type mismatch in Set")
             }
             TypedExpr::Set(extract_type(&t1_prime), name.clone(), Box::new(t1_prime))
         }
@@ -167,13 +170,13 @@ fn type_check_expr(
                 let a_typed_exprn =
                     type_check_expr(a, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&a_typed_exprn) != ExprType::Int {
-                    panic!("type mismatch");
+                    panic!("Type mismatch: BinOp argument not an Int");
                 }
 
                 let b_typed_exprn =
                     type_check_expr(b, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&b_typed_exprn) != ExprType::Int {
-                    panic!("type mismatch");
+                    panic!("Type mismatch: BinOp argument not an Int");
                 }
 
                 TypedExpr::BinOp(
@@ -191,7 +194,7 @@ fn type_check_expr(
                 let b_typed_exprn =
                     type_check_expr(b, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&a_typed_exprn) != extract_type(&b_typed_exprn) {
-                    panic!("type mismatch");
+                    panic!("Type mismatch: Equal has different argument types");
                 }
 
                 TypedExpr::BinOp(
@@ -207,13 +210,13 @@ fn type_check_expr(
                 let a_typed_exprn =
                     type_check_expr(a, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&a_typed_exprn) != ExprType::Int {
-                    panic!("type mismatch");
+                    panic!("Type mismatch: BinOp argument not an Int");
                 }
 
                 let b_typed_exprn =
                     type_check_expr(b, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&b_typed_exprn) != ExprType::Int {
-                    panic!("type mismatch");
+                    panic!("Type mismatch: BinOp argument not an Int");
                 }
 
                 TypedExpr::BinOp(
@@ -235,7 +238,7 @@ fn type_check_expr(
                 allow_input,
             );
             if extract_type(&typed_cond) != ExprType::Bool {
-                panic!("type mismatch");
+                panic!("Type mismatch: If condition not an Bool");
             };
 
             let typed_if_true = type_check_expr(
@@ -258,7 +261,7 @@ fn type_check_expr(
                     Box::new(typed_if_false),
                 )
             } else {
-                panic!("type mismatch")
+                panic!("Type mismatch: If clauses have different types")
             }
         }
 
@@ -272,7 +275,7 @@ fn type_check_expr(
                 allow_input,
             );
             if extract_type(&typed_stop_cond) != ExprType::Bool {
-                panic!("type mismatch")
+                panic!("Type mismatch: RepeatUntil condition not an Bool")
             }
 
             // repeat-until evaluates to the body (once stop_cond is true)
@@ -291,7 +294,7 @@ fn type_check_expr(
 
         Expr::Block(expns) => {
             if expns.len() == 0 {
-                panic!("invalid")
+                panic!("Invalid: Block is Empty")
             }
             let mut block_typed_exprn: Vec<TypedExpr> = Vec::new();
 
@@ -315,7 +318,7 @@ fn type_check_expr(
             // check that function exists
             let fun_sig = match function_sigs.get(fun_name) {
                 Some(fun_sig) => fun_sig,
-                None => panic!("Called function which doesn't exist"),
+                None => panic!("Called function {:?}, which doesn't exist", fun_name),
             };
 
             let (return_type, param_types) = match fun_sig {
@@ -324,7 +327,7 @@ fn type_check_expr(
 
             // check that there's the correct number of arguments
             if param_types.len() != arguments.len() {
-                panic!("Called function with wrong number of arguments") // TODO: error naming
+                panic!("Called function with wrong number of arguments")
             }
 
             // check that arguments are well typed, and agree with function sig
@@ -342,8 +345,8 @@ fn type_check_expr(
 
                 if extract_type(&arg_typed) != *expr_type {
                     panic!("Called function with mismatched arg types")
-                } 
-                
+                }
+
                 typed_args.push(arg_typed);
             }
 

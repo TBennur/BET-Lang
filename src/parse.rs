@@ -145,8 +145,7 @@ fn parse_defn(s: &Sexp) -> UserFunction {
 
                 UserFunction::UserFun(
                     fun_name.to_string(),
-                    params_vec,
-                    ret_type,
+                    FunSignature::UserFun(ret_type, params_vec),
                     parse_expr(fun_body),
                 )
             }
