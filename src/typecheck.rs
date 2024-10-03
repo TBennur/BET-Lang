@@ -1,9 +1,81 @@
+use im::HashMap;
+
 use crate::structs::*;
 
+pub fn type_check_prog(p: &Prog) -> TypedProg {
+    match p {
+        Prog::Program(functions, body) => {
+            // read all functions into map of function name to type, checking for dupes
+            let mut function_sigs: HashMap<String, FunSignature> = im::HashMap::new();
+            for function in functions {
+                match function {
+                    UserFunction::UserFun(name, param_types, ret_type, _) => {
+                        let function_sig = FunSignature::UserFun(*ret_type, param_types.to_vec());
+                        match function_sigs.get(name) {
+                            Some(_) => panic!("Duplicate Function Definition"), // TODO
+                            None => function_sigs.insert(name.to_string(), function_sig),
+                        }
+                    }
+                };
+            }
 
-pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> TypedExpr {
+            let mut typed_functions = Vec::new();
+
+            // typecheck each function
+            for function in functions {
+                let typed_function = match function {
+                    UserFunction::UserFun(name, param_types, ret_type, body) => {
+                        // insert args into type bindings
+                        let mut type_bindings: HashMap<String, ExprType> = im::HashMap::new();
+                        for (param_type, param_name) in param_types {
+                            match type_bindings.get(param_name) {
+                                Some(_) => panic!("Duplicate Argument"), // TODO error naming
+                                None => type_bindings.insert(param_name.to_string(), *param_type),
+                            };
+                        }
+
+                        // get actual return type of body
+                        let type_checked_body =
+                            type_check_expr(body, type_bindings, function_sigs.clone(), false);
+
+                        // compare to signature type
+                        if *ret_type != extract_type(&type_checked_body) {
+                            panic!("Mismatched function signature & body"); // TODO: error naming
+                        }
+
+                        TypedFunction::UserFun(
+                            name.to_string(),
+                            extract_type(&type_checked_body),
+                            param_types.to_vec(),
+                            type_checked_body,
+                        )
+                    }
+                };
+
+                typed_functions.push(typed_function);
+            }
+
+            // allow input in the body of the program
+            let typed_body = type_check_expr(body, im::HashMap::new(), function_sigs.clone(), true);
+            TypedProg::Program(extract_type(&typed_body), typed_functions, typed_body)
+        }
+    }
+}
+
+fn type_check_expr(
+    e: &Expr,
+    type_bindings: im::HashMap<String, ExprType>,
+    function_sigs: im::HashMap<String, FunSignature>,
+    allow_input: bool,
+) -> TypedExpr {
     match e {
-        Expr::Input => TypedExpr::Input(ExprType::Int),
+        Expr::Input => {
+            if allow_input {
+                TypedExpr::Input(ExprType::Int)
+            } else {
+                panic!("Invalid")
+            }
+        }
 
         Expr::Boolean(b) => TypedExpr::Boolean(*b),
 
@@ -14,7 +86,8 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
         Expr::Number(n) => TypedExpr::Number(*n),
 
         Expr::UnOp(op1, expr) => {
-            let typed_expr = type_check(expr, type_bindings);
+            let typed_expr =
+                type_check_expr(expr, type_bindings, function_sigs.clone(), allow_input);
             match op1 {
                 Op1::Add1 | Op1::Sub1 => match extract_type(&typed_expr) {
                     ExprType::Int => TypedExpr::UnOp(ExprType::Int, *op1, Box::new(typed_expr)),
@@ -34,7 +107,12 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
             };
 
             // can only "set" a variable to the same type within the current scope
-            let t1_prime = type_check(new_value, type_bindings.clone());
+            let t1_prime = type_check_expr(
+                new_value,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                allow_input,
+            );
             if extract_type(&t1_prime) != t1 {
                 panic!("type mismatch")
             }
@@ -55,7 +133,12 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
 
                 // typecheck the expression
                 // panics if if doesn't typecheck
-                let typed_expr = type_check(exp, curr_let_binding.clone());
+                let typed_expr = type_check_expr(
+                    exp,
+                    curr_let_binding.clone(),
+                    function_sigs.clone(),
+                    allow_input,
+                );
 
                 // bind id to that type, allowing shadowing of different types
                 curr_let_binding.insert(id.to_string(), extract_type(&typed_expr));
@@ -65,7 +148,12 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
             }
 
             // evaluate the type of the final expression after all the bindings
-            let final_typed_expr = type_check(finally, curr_let_binding);
+            let final_typed_expr = type_check_expr(
+                finally,
+                curr_let_binding,
+                function_sigs.clone(),
+                allow_input,
+            );
             TypedExpr::Let(
                 extract_type(&final_typed_expr),
                 bindings_typed_exnr,
@@ -76,12 +164,14 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
         Expr::BinOp(op2, a, b) => match op2 {
             // int * int => int
             Op2::Plus | Op2::Minus | Op2::Times => {
-                let a_typed_exprn = type_check(a, type_bindings.clone());
+                let a_typed_exprn =
+                    type_check_expr(a, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&a_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
 
-                let b_typed_exprn = type_check(b, type_bindings.clone());
+                let b_typed_exprn =
+                    type_check_expr(b, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&b_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
@@ -96,8 +186,10 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
 
             // t * t => bool
             Op2::Equal => {
-                let a_typed_exprn = type_check(a, type_bindings.clone());
-                let b_typed_exprn = type_check(b, type_bindings.clone());
+                let a_typed_exprn =
+                    type_check_expr(a, type_bindings.clone(), function_sigs.clone(), allow_input);
+                let b_typed_exprn =
+                    type_check_expr(b, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&a_typed_exprn) != extract_type(&b_typed_exprn) {
                     panic!("type mismatch");
                 }
@@ -112,12 +204,14 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
 
             // int * int => bool
             Op2::Greater | Op2::GreaterEqual | Op2::Less | Op2::LessEqual => {
-                let a_typed_exprn = type_check(a, type_bindings.clone());
+                let a_typed_exprn =
+                    type_check_expr(a, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&a_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
 
-                let b_typed_exprn = type_check(b, type_bindings.clone());
+                let b_typed_exprn =
+                    type_check_expr(b, type_bindings.clone(), function_sigs.clone(), allow_input);
                 if extract_type(&b_typed_exprn) != ExprType::Int {
                     panic!("type mismatch");
                 }
@@ -134,13 +228,28 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
         // bool * t2 * t2 => t2
         Expr::If(cond, val_if_true, val_if_false) => {
             // cond should typecheck to bool
-            let typed_cond = type_check(cond, type_bindings.clone());
+            let typed_cond = type_check_expr(
+                cond,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                allow_input,
+            );
             if extract_type(&typed_cond) != ExprType::Bool {
                 panic!("type mismatch");
             };
 
-            let typed_if_true = type_check(val_if_true, type_bindings.clone());
-            let typed_if_false = type_check(val_if_false, type_bindings.clone());
+            let typed_if_true = type_check_expr(
+                val_if_true,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                allow_input,
+            );
+            let typed_if_false = type_check_expr(
+                val_if_false,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                allow_input,
+            );
             if extract_type(&typed_if_true) == extract_type(&typed_if_false) {
                 TypedExpr::If(
                     extract_type(&typed_if_true),
@@ -156,13 +265,23 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
         // t1 * t2 => t1
         Expr::RepeatUntil(body, stop_cond) => {
             // stop_cond must be a bool
-            let typed_stop_cond = type_check(stop_cond, type_bindings.clone());
+            let typed_stop_cond = type_check_expr(
+                stop_cond,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                allow_input,
+            );
             if extract_type(&typed_stop_cond) != ExprType::Bool {
                 panic!("type mismatch")
             }
 
             // repeat-until evaluates to the body (once stop_cond is true)
-            let typed_body = type_check(body, type_bindings.clone());
+            let typed_body = type_check_expr(
+                body,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                allow_input,
+            );
             TypedExpr::RepeatUntil(
                 extract_type(&typed_body),
                 Box::new(typed_body.clone()),
@@ -179,7 +298,12 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
             let mut final_type = ExprType::Int; // arbitrary
             for expr in expns {
                 // typecheck each expression in the block
-                let typed_exprn = type_check(expr, type_bindings.clone());
+                let typed_exprn = type_check_expr(
+                    expr,
+                    type_bindings.clone(),
+                    function_sigs.clone(),
+                    allow_input,
+                );
                 final_type = extract_type(&typed_exprn);
                 block_typed_exprn.push(typed_exprn.clone());
             }
@@ -187,6 +311,44 @@ pub fn type_check(e: &Expr, type_bindings: im::HashMap<String, ExprType>) -> Typ
 
             TypedExpr::Block(final_type, block_typed_exprn)
         }
-        Expr::Call(_, vec) => todo!(),
+        Expr::Call(fun_name, arguments) => {
+            // check that function exists
+            let fun_sig = match function_sigs.get(fun_name) {
+                Some(fun_sig) => fun_sig,
+                None => panic!("Called function which doesn't exist"),
+            };
+
+            let (return_type, param_types) = match fun_sig {
+                FunSignature::UserFun(expr_type, param_types) => (expr_type, param_types),
+            };
+
+            // check that there's the correct number of arguments
+            if param_types.len() != arguments.len() {
+                panic!("Called function with wrong number of arguments") // TODO: error naming
+            }
+
+            // check that arguments are well typed, and agree with function sig
+            let zipped: Vec<(&Expr, &(ExprType, String))> =
+                arguments.iter().zip(param_types.iter()).collect();
+
+            let mut typed_args = Vec::new();
+            for (arg_exp, (expr_type, _)) in zipped {
+                let arg_typed = type_check_expr(
+                    arg_exp,
+                    type_bindings.clone(),
+                    function_sigs.clone(),
+                    allow_input,
+                );
+
+                if extract_type(&arg_typed) != *expr_type {
+                    panic!("Called function with mismatched arg types")
+                } 
+                
+                typed_args.push(arg_typed);
+            }
+
+            // Check function
+            TypedExpr::Call(*return_type, fun_name.to_string(), typed_args)
+        }
     }
 }

@@ -1,14 +1,12 @@
-
 #[derive(Debug)]
 pub enum Prog {
-    Program(Vec<Function>, Expr),
+    Program(Vec<UserFunction>, Expr),
 }
 
 #[derive(Debug)]
 pub enum Function {
     SnekPrint,
     SnekError,
-    UserFun(String, Vec<(ExprType, String)>, ExprType, Expr),
 }
 
 #[derive(Debug)]
@@ -77,7 +75,7 @@ pub enum Expr {
     Set(String, Box<Expr>),
     Block(Vec<Expr>),
     Input,
-    Call(String, Vec<Expr>)
+    Call(String, Vec<Expr>),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -100,6 +98,26 @@ pub enum TypedExpr {
     Block(ExprType, Vec<TypedExpr>),
     Call(ExprType, String, Vec<TypedExpr>), // ExprType is return type of call
     Input(ExprType),
+}
+
+#[derive(Clone)]
+pub enum FunSignature {
+    // to insert into function signature hashmap, for type_check_expr
+    UserFun(ExprType, Vec<(ExprType, String)>),
+}
+
+pub enum TypedFunction {
+    // for use in a program
+    UserFun(String, ExprType, Vec<(ExprType, String)>, TypedExpr),
+}
+
+pub enum TypedProg {
+    Program(ExprType, Vec<TypedFunction>, TypedExpr),
+}
+
+#[derive(Debug)]
+pub enum UserFunction {
+    UserFun(String, Vec<(ExprType, String)>, ExprType, Expr),
 }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {

@@ -1,7 +1,7 @@
 
 use crate::structs::*;
 use crate::consts::*;
-use crate::typecheck::type_check;
+use crate::typecheck::type_check_prog;
 
 
 pub fn type_to_flag(t: ExprType) -> i32 {
@@ -354,7 +354,6 @@ fn fn_to_str(f: &Function) -> String {
     match f {
         Function::SnekPrint => "snek_print".to_string(),
         Function::SnekError => "snek_error".to_string(),
-        Function::UserFun(name, _, _, _) => name.to_string(),
     }
 }
 
@@ -375,8 +374,7 @@ fn val_to_str(v: &Val) -> String {
     }
 }
 
-fn compile_expr(e: &Expr) -> String {
-    let typed_e = type_check(e, im::HashMap::new());
+fn compile_expr(typed_e: &TypedExpr) -> String {
     let flag: i32 = match extract_type(&typed_e) {
         ExprType::Int => 1,
         ExprType::Bool => 0,
@@ -428,7 +426,8 @@ fn compile_expr(e: &Expr) -> String {
 }
 
 pub fn compile_prog(p: &Prog) -> String {
-    match p {
-        Prog::Program(_, expr) => compile_expr(&expr),
+    let typed_p = type_check_prog(p);
+    match typed_p {
+        TypedProg::Program(_, _, typed_e) => compile_expr(&typed_e),
     }
 }
