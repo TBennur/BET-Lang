@@ -19,7 +19,7 @@ fn generate_label(label_name: &String, label_counter: i64) -> String {
 }
 
 fn compute_aligned_rsp_offset(rsp_offset: i32) -> i32 {
-    return (rsp_offset / 16) * 16 + 8;
+    return (rsp_offset / 16) * 16 - 8;
 }
 
 fn compile_bin_op_to_instrs(
@@ -84,14 +84,8 @@ fn compile_bin_op_to_instrs(
                 Val::RegOffset(Reg::RSP, a_rsp_offset),
             ));
 
-            let label_true = generate_label(
-                label_name,
-                increment_counter(label_counter),
-            );
-            let label_finish = generate_label(
-                label_name,
-                increment_counter(label_counter),
-            );
+            let label_true = generate_label(label_name, increment_counter(label_counter));
+            let label_finish = generate_label(label_name, increment_counter(label_counter));
 
             instr_to_compute_res.push(match op {
                 Op2::Greater => Instr::JumpGreater,
@@ -161,12 +155,15 @@ fn compile_expr_to_instrs(
 
                     instructions.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
                     instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
-                    instructions.push(Instr::ISub(
+
+                    instructions.push(Instr::IAdd(
                         Val::Reg(Reg::RSP),
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
                     )); // Reset Alignment
+                    
                     instructions.push(Instr::Call(Function::SnekPrint));
-                    instructions.push(Instr::IAdd(
+                    
+                    instructions.push(Instr::ISub(
                         Val::Reg(Reg::RSP),
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
                     )); // Reset Alignment
@@ -379,7 +376,53 @@ fn compile_expr_to_instrs(
             instructions_to_compile_repeat_until
         }
 
-        TypedExpr::Call(_, _, _) => todo!(),
+        TypedExpr::Call(ret_type, fun_name, args) => {
+            todo!();
+            /*
+            foo(a, b) =>
+            |    a        | <-- RSP + 16
+            |    b        | <-- RSP + 8
+            | return addr | <-- RSP
+            */
+
+            let mut instructions = Vec::new();
+            let mut curr_rsp_offset = rsp_offset;
+
+            // evaluate the arguments, pushing each onto the stack
+            for arg in args {
+                let instr_to_eval_arg = compile_expr_to_instrs(
+                    arg,
+                    scope_bindings.clone(),
+                    rsp_offset,
+                    label_counter,
+                    label_name,
+                );
+                instructions.extend(instr_to_eval_arg);
+
+                // store this argument on the stack
+                curr_rsp_offset -= SIZEOF_I_64;
+                instructions.push(Instr::IMov(
+                    Val::RegOffset(Reg::RSP, curr_rsp_offset),
+                    Val::Reg(Reg::RAX),
+                ));
+            }
+
+            // update RSP for the function call
+            instructions.push(Instr::IAdd(
+                Val::Reg(Reg::RSP),
+                Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
+            )); // Reset Alignment
+            
+            // call the function
+            instructions.push(Instr::Call(Function::Custom(fun_name.to_string())));
+            
+            instructions.push(Instr::ISub(
+                Val::Reg(Reg::RSP),
+                Val::Imm(compute_aligned_rsp_offset(curr_rsp_offset)),
+            )); // Reset Alignment
+
+            instructions
+        }
     }
 }
 
@@ -407,6 +450,7 @@ fn fn_to_str(f: &Function) -> String {
     match f {
         Function::SnekPrint => "snek_print".to_string(),
         Function::SnekError => "snek_error".to_string(),
+        Function::Custom(name) => name.to_string(),
     }
 }
 

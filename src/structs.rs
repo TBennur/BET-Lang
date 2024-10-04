@@ -5,6 +5,7 @@ pub enum Prog {
 
 #[derive(Debug)]
 pub enum Function {
+    Custom(String),
     SnekPrint,
     SnekError,
 }

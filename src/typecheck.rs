@@ -3,66 +3,55 @@ use im::HashMap;
 use crate::structs::*;
 
 pub fn type_check_prog(p: &Prog) -> TypedProg {
-    match p {
-        Prog::Program(functions, body) => {
-            // read all functions into map of function name to type, checking for dupes
-            let mut function_sigs: HashMap<String, FunSignature> = im::HashMap::new();
-            for function in functions {
-                match function {
-                    UserFunction::UserFun(name, function_sig, _) => match function_sigs.get(name) {
-                        Some(_) => panic!("Duplicate Function Definition"),
-                        None => function_sigs.insert(name.to_string(), function_sig.to_owned()),
-                    },
-                };
-            }
+    let Prog::Program(functions, body) = p;
 
-            let mut typed_functions = Vec::new();
-
-            // typecheck each function
-            for function in functions {
-                let typed_function = match function {
-                    UserFunction::UserFun(
-                        name,
-                        FunSignature::UserFun(ret_type, param_types),
-                        body,
-                    ) => {
-                        // insert args into type bindings
-                        let mut type_bindings: HashMap<String, ExprType> = im::HashMap::new();
-                        for (param_type, param_name) in param_types {
-                            match type_bindings.get(param_name) {
-                                Some(_) => panic!("Duplicate Argument"),
-                                None => type_bindings.insert(param_name.to_string(), *param_type),
-                            };
-                        }
-
-                        // get actual return type of body
-                        let type_checked_body =
-                            type_check_expr(body, type_bindings, function_sigs.clone(), false);
-
-                        // compare to signature type
-                        if *ret_type != extract_type(&type_checked_body) {
-                            panic!("mismatched function signature & body");
-                        }
-
-                        TypedFunction::UserFun(
-                            name.to_string(),
-                            FunSignature::UserFun(
-                                extract_type(&type_checked_body),
-                                param_types.to_vec(),
-                            ),
-                            type_checked_body,
-                        )
-                    }
-                };
-
-                typed_functions.push(typed_function);
-            }
-
-            // allow input in the body of the program
-            let typed_body = type_check_expr(body, im::HashMap::new(), function_sigs.clone(), true);
-            TypedProg::Program(extract_type(&typed_body), typed_functions, typed_body)
-        }
+    // read all functions into map of function name to type, checking for dupes
+    let mut function_sigs: HashMap<String, FunSignature> = im::HashMap::new();
+    for function in functions {
+        match function {
+            UserFunction::UserFun(name, function_sig, _) => match function_sigs.get(name) {
+                Some(_) => panic!("Duplicate Function Definition"),
+                None => function_sigs.insert(name.to_string(), function_sig.to_owned()),
+            },
+        };
     }
+
+    let mut typed_functions = Vec::new();
+
+    // typecheck each function
+    for function in functions {
+        let UserFunction::UserFun(name, FunSignature::UserFun(ret_type, param_types), body) =
+            function;
+
+        // insert args into type bindings
+        let mut type_bindings: HashMap<String, ExprType> = im::HashMap::new();
+        for (param_type, param_name) in param_types {
+            match type_bindings.get(param_name) {
+                Some(_) => panic!("Duplicate Argument"),
+                None => type_bindings.insert(param_name.to_string(), *param_type),
+            };
+        }
+
+        // get actual return type of body
+        let type_checked_body = type_check_expr(body, type_bindings, function_sigs.clone(), false);
+
+        // compare to signature type
+        if *ret_type != extract_type(&type_checked_body) {
+            panic!("mismatched function signature & body");
+        }
+
+        let typed_function = TypedFunction::UserFun(
+            name.to_string(),
+            FunSignature::UserFun(extract_type(&type_checked_body), param_types.to_vec()),
+            type_checked_body,
+        );
+
+        typed_functions.push(typed_function);
+    }
+
+    // allow input in the body of the program
+    let typed_body = type_check_expr(body, im::HashMap::new(), function_sigs.clone(), true);
+    TypedProg::Program(extract_type(&typed_body), typed_functions, typed_body)
 }
 
 fn type_check_expr(
@@ -73,11 +62,11 @@ fn type_check_expr(
 ) -> TypedExpr {
     match e {
         Expr::Input => {
-            if allow_input {
-                TypedExpr::Input(ExprType::Int)
-            } else {
+            if !allow_input {
                 panic!("Invalid: Input is not an Int")
             }
+
+            TypedExpr::Input(ExprType::Int)
         }
 
         Expr::Boolean(b) => TypedExpr::Boolean(*b),
@@ -321,9 +310,7 @@ fn type_check_expr(
                 None => panic!("Called function {:?}, which doesn't exist", fun_name),
             };
 
-            let (return_type, param_types) = match fun_sig {
-                FunSignature::UserFun(expr_type, param_types) => (expr_type, param_types),
-            };
+            let FunSignature::UserFun(return_type, param_types) = fun_sig;
 
             // check that there's the correct number of arguments
             if param_types.len() != arguments.len() {
