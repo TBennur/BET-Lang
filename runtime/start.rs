@@ -10,24 +10,24 @@ extern "C" {
 }
 
 #[export_name = "\x01snek_error"]
-pub extern "C" fn snek_error(errcode: i64) {
+pub extern "C" fn snek_error() {
     eprintln!("overflow");
     std::process::exit(1);
 }
 
-const is_bool: u64 = 0;
-const is_int: u64 = 1;
+const IS_BOOL: u64 = 0;
+const IS_INT: u64 = 1;
 
 #[export_name = "\x01snek_print"]
 /// Changed snek_print to reflect the semantic meaning of print, which evaluates to the printed value
 pub extern "C" fn snek_print(value: i64, type_flag: u64) -> i64 {
-    if type_flag == is_bool {
+    if type_flag == IS_BOOL {
         if value == 0 {
             println!("false");
         } else {
             println!("true");
         }
-    } else if type_flag == is_int {
+    } else if type_flag == IS_INT {
         println!("{}", value);
     } else {
         println!("unknown flag");
@@ -37,7 +37,7 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64) -> i64 {
 
 fn parse_input(input: &str) -> u64 {
     let inp: i64 = match input.parse::<i64>() {
-        Err(error) => panic!("Invalid Input"),
+        Err(_) => panic!("Invalid Input"),
         Ok(val) => val,
     };
     inp as u64
@@ -48,5 +48,5 @@ fn main() {
     let input = if args.len() == 2 { &args[1] } else { "0" };
     let input = parse_input(&input);
 
-    let i: u64 = unsafe { our_code_starts_here(input) };
+    let _i: u64 = unsafe { our_code_starts_here(input) };
 }

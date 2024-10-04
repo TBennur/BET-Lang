@@ -98,7 +98,7 @@ pub enum TypedExpr {
     Set(ExprType, String, Box<TypedExpr>),
     Block(ExprType, Vec<TypedExpr>),
     Call(ExprType, String, Vec<TypedExpr>), // ExprType is return type of call
-    Input(ExprType),
+    Input,
 }
 
 #[derive(Clone, Debug)]
@@ -125,6 +125,7 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
     match t {
         TypedExpr::Number(_) => ExprType::Int,
         TypedExpr::Boolean(_) => ExprType::Bool,
+        TypedExpr::Input=> ExprType::Int,
         TypedExpr::Id(expr_type, _) => *expr_type,
         TypedExpr::Let(expr_type, _, _) => *expr_type,
         TypedExpr::UnOp(expr_type, _, _) => *expr_type,
@@ -133,7 +134,6 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         TypedExpr::RepeatUntil(expr_type, _, _) => *expr_type,
         TypedExpr::Set(expr_type, _, _) => *expr_type,
         TypedExpr::Block(expr_type, _) => *expr_type,
-        TypedExpr::Input(expr_type) => *expr_type,
         TypedExpr::Call(expr_type, _, _) => *expr_type,
     }
 }

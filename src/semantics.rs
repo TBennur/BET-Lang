@@ -24,7 +24,8 @@ pub fn is_keyword(id: &str) -> bool {
         "<",
         "int",
         "bool",
-        "our_code_starts_here"
+        "our_code_starts_here",
+        "__main"
     ]
     .contains(&id);
 }

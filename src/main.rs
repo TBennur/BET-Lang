@@ -42,6 +42,7 @@ extern snek_print
 extern snek_error
 
 global our_code_starts_here
+
 {}
 ",
         result

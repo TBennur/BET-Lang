@@ -1,0 +1,4 @@
+(fun five () int
+  5
+)
+(five)

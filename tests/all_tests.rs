@@ -334,6 +334,12 @@ success_tests! {
         input: "11",
         expected: "false"
     },
+    {
+        name: diamondback_even_odd_1000_print,
+        file: "diamondback/even_odd.snek",
+        input: "1000",
+        expected: "1000\ntrue\ntrue"
+    },
 }
 
 runtime_error_tests! {

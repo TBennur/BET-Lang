@@ -14,7 +14,7 @@ fn parse_expr(s: &Sexp) -> Expr {
             "true" => Expr::Boolean(true),
             "false" => Expr::Boolean(false),
             "input" => Expr::Input,
-            id => Expr::Id(id_to_string(id)),
+            id => Expr::Id(id_to_string(id)), // panics if id is a keyword
         },
 
         // vectors
@@ -24,6 +24,7 @@ fn parse_expr(s: &Sexp) -> Expr {
                 fun_name.to_string(),
                 args.into_iter().map(parse_expr).collect(),
             ),
+            
             // block
             // has the form block <expr>+
             [Sexp::Atom(S(op)), exprns @ ..] if op == "block" => {
@@ -124,8 +125,10 @@ fn parse_defn(s: &Sexp) -> UserFunction {
             [Sexp::Atom(S(fun_keyword)), Sexp::Atom(S(fun_name)), Sexp::List(params), Sexp::Atom(S(ret_type)), fun_body]
                 if fun_keyword == "fun" =>
             {
+                // check name
                 let ret_type = type_str_to_expr_type(ret_type);
 
+                // parse params
                 let mut params_vec: Vec<(ExprType, String)> = Vec::new();
                 for param_sexp in params {
                     match param_sexp {

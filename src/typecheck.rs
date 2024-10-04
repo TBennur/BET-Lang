@@ -5,14 +5,14 @@ use crate::structs::*;
 pub fn type_check_prog(p: &Prog) -> TypedProg {
     let Prog::Program(functions, body) = p;
 
-    // read all functions into map of function name to type, checking for dupes
+    // read all functions into map of function name to type, checking for dupes and illegal names
     let mut function_sigs: HashMap<String, FunSignature> = im::HashMap::new();
     for function in functions {
-        match function {
-            UserFunction::UserFun(name, function_sig, _) => match function_sigs.get(name) {
-                Some(_) => panic!("Duplicate Function Definition"),
-                None => function_sigs.insert(name.to_string(), function_sig.to_owned()),
-            },
+        let UserFunction::UserFun(name, function_sig, _) = function;
+
+        match function_sigs.get(name) {
+            Some(_) => panic!("Duplicate Function Definition"),
+            None => function_sigs.insert(name.to_string(), function_sig.to_owned()),
         };
     }
 
@@ -66,7 +66,7 @@ fn type_check_expr(
                 panic!("Invalid: Input is not an Int")
             }
 
-            TypedExpr::Input(ExprType::Int)
+            TypedExpr::Input
         }
 
         Expr::Boolean(b) => TypedExpr::Boolean(*b),

@@ -123,12 +123,20 @@ fn compile_expr_to_instrs(
     // offset from rsp, in bytes
     match e {
         // immediate values
-        TypedExpr::Input(_) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))],
         TypedExpr::Boolean(b) => match b {
             false => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
             true => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(1))],
         },
         TypedExpr::Number(x) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(*x))],
+
+        // input will be passed to main as any other argument: on the stack
+        TypedExpr::Input => match scope_bindings.get(&"input".to_string()) {
+            None => panic!("Unbound variable identifier {:?}", "input"),
+            Some(offset) => vec![Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RSP, *offset),
+            )],
+        },
 
         TypedExpr::Id(_, identifier) => match scope_bindings.get(identifier) {
             None => panic!("Unbound variable identifier {:?}", identifier),
@@ -388,6 +396,13 @@ fn compile_expr_to_instrs(
             let mut instructions = Vec::new();
             let mut curr_rsp_offset = rsp_offset;
 
+            // what rsp would be after pushing args
+            let unadjusted_call_rsp = rsp_offset - (SIZEOF_I_64 * args.len() as i32);
+
+            // preemptively adjust rsp so that it will 8 byte aligned, mod 16, after pushing args
+            curr_rsp_offset +=
+                compute_aligned_rsp_offset(unadjusted_call_rsp) - unadjusted_call_rsp;
+
             // evaluate the arguments, pushing each onto the stack
             for arg in args {
                 let instr_to_eval_arg = compile_expr_to_instrs(
@@ -471,23 +486,6 @@ fn val_to_str(v: &Val) -> String {
     }
 }
 
-fn compile_expr(typed_e: &TypedExpr, label_name: &String) -> Vec<Instr> {
-    // add the label for our code
-    let mut instrs = vec![Instr::AddLabel(label_name.to_string())];
-    let init_rsp_offset = 0; // TODO
-                             // compile the instructions which evaluate the expression, loading the result into rax
-    let mut label_counter: i64 = 0;
-    instrs.extend(compile_expr_to_instrs(
-        &typed_e,
-        im::HashMap::new(),
-        init_rsp_offset,
-        &mut label_counter,
-        label_name,
-    ));
-
-    instrs
-}
-
 fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
     let TypedFunction::UserFun(fun_name, FunSignature::UserFun(_ret_type, args), typed_body) = f;
 
@@ -507,7 +505,6 @@ fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
     | return addr | <-- RSP
     */
 
-    
     // iterate over args in reverse order, since later args are closer to RSP
     let mut arg_offset_above_rsp = 0;
     for (_, arg_name) in args.iter().rev() {
@@ -539,12 +536,39 @@ pub fn compile_prog(p: &Prog) -> String {
         all_instrs.extend(compile_fn(&typed_fun));
     }
 
-    // // Push input to be the "first argument" to "main" (body of program)
-    // all_instrs.push(Instr::ISub(Val::Reg(Reg::RSP), Val::Imm(SIZEOF_I_64)));
-    // all_instrs.push(Instr::IMov(Val::RegOffset(Reg::RSP, 0), Val::Reg(Reg::RDI)));
+    // compile program body, with the label __main
+    let main = TypedFunction::UserFun(
+        "__main".to_string(),
+        FunSignature::UserFun(body_type, vec![(ExprType::Int, "input".to_string())]),
+        typed_e,
+    );
+    all_instrs.extend(compile_fn(&main));
 
-    // compile program body, with the entrypoint label
-    all_instrs.extend(compile_expr(&typed_e, &ENTRYPOINT_LABEL.to_string()));
+    // compile the entrypoint, which loads RDI (input) onto the stack, then calls __main
+
+    // entrypoint label
+    all_instrs.push(Instr::AddLabel(ENTRYPOINT_LABEL.to_string()));
+
+    // push RDI onto stack
+    all_instrs.push(Instr::IMov(
+        Val::RegOffset(Reg::RSP, -SIZEOF_I_64),
+        Val::Reg(Reg::RDI),
+    ));
+
+    // update RSP for __main call
+    all_instrs.push(Instr::IAdd(
+        Val::Reg(Reg::RSP),
+        Val::Imm(compute_aligned_rsp_offset(-SIZEOF_I_64)),
+    ));
+
+    // call __main
+    all_instrs.push(Instr::Call(Function::Custom("__main".to_string())));
+
+    // restore RSP after __main call
+    all_instrs.push(Instr::ISub(
+        Val::Reg(Reg::RSP),
+        Val::Imm(compute_aligned_rsp_offset(-SIZEOF_I_64)),
+    ));
 
     // on a success, we fall through to here, and snek print is called
 
