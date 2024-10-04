@@ -122,6 +122,8 @@ fn compile_expr_to_instrs(
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
     match e {
+        TypedExpr::RDInput => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))],
+
         // immediate values
         TypedExpr::Boolean(b) => match b {
             false => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
@@ -487,7 +489,7 @@ fn val_to_str(v: &Val) -> String {
 }
 
 fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
-    let TypedFunction::UserFun(fun_name, FunSignature::UserFun(_ret_type, args), typed_body) = f;
+    let TypedFunction::Fun(fun_name, FunSignature::UserFun(_ret_type, args), typed_body) = f;
 
     // add the label for our code
     let mut instrs = vec![Instr::AddLabel(fun_name.to_string())];
@@ -537,58 +539,32 @@ pub fn compile_prog(p: &Prog) -> String {
     }
 
     // compile program body, with the label __main
-    let main = TypedFunction::UserFun(
-        "__main".to_string(),
-        FunSignature::UserFun(body_type, vec![(ExprType::Int, "input".to_string())]),
+    let main = TypedFunction::Fun(
+        MAIN_LABEL.to_string(),
+        FunSignature::UserFun(body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
         typed_e,
     );
     all_instrs.extend(compile_fn(&main));
 
     // compile the entrypoint, which loads RDI (input) onto the stack, then calls __main
-
-    // entrypoint label
-    all_instrs.push(Instr::AddLabel(ENTRYPOINT_LABEL.to_string()));
-
-    // push RDI onto stack
-    all_instrs.push(Instr::IMov(
-        Val::RegOffset(Reg::RSP, -SIZEOF_I_64),
-        Val::Reg(Reg::RDI),
-    ));
-
-    // update RSP for __main call
-    all_instrs.push(Instr::IAdd(
-        Val::Reg(Reg::RSP),
-        Val::Imm(compute_aligned_rsp_offset(-SIZEOF_I_64)),
-    ));
-
-    // call __main
-    all_instrs.push(Instr::Call(Function::Custom("__main".to_string())));
-
-    // restore RSP after __main call
-    all_instrs.push(Instr::ISub(
-        Val::Reg(Reg::RSP),
-        Val::Imm(compute_aligned_rsp_offset(-SIZEOF_I_64)),
-    ));
-
-    // on a success, we fall through to here, and snek print is called
-
-    // move type flag (value given by typecheck) to rsi
-    all_instrs.push(Instr::IMov(
-        Val::Reg(Reg::RSI),
-        Val::Imm(type_to_flag(body_type)),
-    ));
-
-    // move the result (stored in rax) to rdi
-    all_instrs.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
-
-    // call SnekPrint (takes in rdi, the result, and rsi, the type)
-    all_instrs.push(Instr::Call(Function::SnekPrint));
-
-    // return 0 (no error) after SnekPrint is called
-    all_instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));
-    all_instrs.push(Instr::Ret);
+    let entrypoint = TypedFunction::Fun(
+        // (print (main input : int ) : body_type ) : body_type
+        ENTRYPOINT_LABEL.to_string(),
+        FunSignature::UserFun(body_type, Vec::new()), // unit -> body_type
+        TypedExpr::UnOp(
+            body_type,
+            Op1::Print,
+            Box::new(TypedExpr::Call(
+                body_type,
+                MAIN_LABEL.to_string(),
+                vec![TypedExpr::RDInput],
+            )),
+        ),
+    );
+    all_instrs.extend(compile_fn(&entrypoint));
 
     // a runtime error causes us to jump here before reaching the SnekPrint call
+    // since this function doesn't typecheck in the current type system, write it in ASM
     all_instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
     all_instrs.push(Instr::Call(Function::SnekError));
     all_instrs.push(Instr::Ret);

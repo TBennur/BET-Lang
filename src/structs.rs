@@ -99,6 +99,7 @@ pub enum TypedExpr {
     Block(ExprType, Vec<TypedExpr>),
     Call(ExprType, String, Vec<TypedExpr>), // ExprType is return type of call
     Input,
+    RDInput
 }
 
 #[derive(Clone, Debug)]
@@ -109,7 +110,7 @@ pub enum FunSignature {
 
 pub enum TypedFunction {
     // for use in a program
-    UserFun(String, FunSignature, TypedExpr),
+    Fun(String, FunSignature, TypedExpr),
 }
 
 pub enum TypedProg {
@@ -124,6 +125,7 @@ pub enum UserFunction {
 pub fn extract_type(t: &TypedExpr) -> ExprType {
     match t {
         TypedExpr::Number(_) => ExprType::Int,
+        TypedExpr::RDInput => ExprType::Int,
         TypedExpr::Boolean(_) => ExprType::Bool,
         TypedExpr::Input=> ExprType::Int,
         TypedExpr::Id(expr_type, _) => *expr_type,

@@ -40,7 +40,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
             panic!("mismatched function signature & body");
         }
 
-        let typed_function = TypedFunction::UserFun(
+        let typed_function = TypedFunction::Fun(
             name.to_string(),
             FunSignature::UserFun(extract_type(&type_checked_body), param_types.to_vec()),
             type_checked_body,
