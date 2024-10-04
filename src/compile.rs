@@ -584,7 +584,8 @@ pub fn compile_prog(p: &Prog) -> String {
     // call SnekPrint (takes in rdi, the result, and rsi, the type)
     all_instrs.push(Instr::Call(Function::SnekPrint));
 
-    // return after SnekPrint is called
+    // return 0 (no error) after SnekPrint is called
+    all_instrs.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0)));
     all_instrs.push(Instr::Ret);
 
     // a runtime error causes us to jump here before reaching the SnekPrint call
