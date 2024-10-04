@@ -111,6 +111,7 @@ fn compile_bin_op_to_instrs(
 /// of the expression in RAX
 ///
 /// `rsp_offset` is the next available position on rsp to be used for storing results
+/// once all instructions have been executed, RSP should have the same value as before any executed
 fn compile_expr_to_instrs(
     e: &TypedExpr,
     scope_bindings: im::HashMap<String, i32>,
@@ -160,9 +161,9 @@ fn compile_expr_to_instrs(
                         Val::Reg(Reg::RSP),
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
                     )); // Reset Alignment
-                    
+
                     instructions.push(Instr::Call(Function::SnekPrint));
-                    
+
                     instructions.push(Instr::ISub(
                         Val::Reg(Reg::RSP),
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
@@ -376,8 +377,7 @@ fn compile_expr_to_instrs(
             instructions_to_compile_repeat_until
         }
 
-        TypedExpr::Call(ret_type, fun_name, args) => {
-            todo!();
+        TypedExpr::Call(_ret_type, fun_name, args) => {
             /*
             foo(a, b) =>
             |    a        | <-- RSP + 16
@@ -410,12 +410,12 @@ fn compile_expr_to_instrs(
             // update RSP for the function call
             instructions.push(Instr::IAdd(
                 Val::Reg(Reg::RSP),
-                Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
+                Val::Imm(compute_aligned_rsp_offset(curr_rsp_offset)),
             )); // Reset Alignment
-            
+
             // call the function
             instructions.push(Instr::Call(Function::Custom(fun_name.to_string())));
-            
+
             instructions.push(Instr::ISub(
                 Val::Reg(Reg::RSP),
                 Val::Imm(compute_aligned_rsp_offset(curr_rsp_offset)),
@@ -489,17 +489,55 @@ fn compile_expr(typed_e: &TypedExpr, label_name: &String) -> Vec<Instr> {
 }
 
 fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
-    todo!()
-    // Prep arguments
-    //
+    let TypedFunction::UserFun(fun_name, FunSignature::UserFun(_ret_type, args), typed_body) = f;
+
+    // add the label for our code
+    let mut instrs = vec![Instr::AddLabel(fun_name.to_string())];
+
+    let init_rsp_offset = 0; // the body of a function expects RSP has been adjusted
+    let mut label_counter = 0; // function names should be unique, so can reset counter
+
+    // prep arguments for our function to access
+    let mut scope_bindings = im::HashMap::new();
+
+    /*
+    foo(a, b) =>
+    |    a        | <-- RSP + 16
+    |    b        | <-- RSP + 8
+    | return addr | <-- RSP
+    */
+
+    
+    // iterate over args in reverse order, since later args are closer to RSP
+    let mut arg_offset_above_rsp = 0;
+    for (_, arg_name) in args.iter().rev() {
+        arg_offset_above_rsp += SIZEOF_I_64;
+        scope_bindings.insert(arg_name.to_string(), arg_offset_above_rsp);
+    }
+
+    // RSP should be the same after running these instr as it was before
+    instrs.extend(compile_expr_to_instrs(
+        typed_body,
+        scope_bindings,
+        init_rsp_offset,
+        &mut label_counter,
+        fun_name,
+    ));
+
+    // return execution
+    instrs.push(Instr::Ret);
+
+    instrs
 }
 
 pub fn compile_prog(p: &Prog) -> String {
-    let TypedProg::Program(body_type, _, typed_e) = type_check_prog(p);
-
-    // let mut rsp_offset = 0;
+    let TypedProg::Program(body_type, typed_funs, typed_e) = type_check_prog(p);
 
     let mut all_instrs = Vec::new();
+
+    for typed_fun in typed_funs {
+        all_instrs.extend(compile_fn(&typed_fun));
+    }
 
     // // Push input to be the "first argument" to "main" (body of program)
     // all_instrs.push(Instr::ISub(Val::Reg(Reg::RSP), Val::Imm(SIZEOF_I_64)));

@@ -305,11 +305,34 @@ success_tests! {
         file: "diamondback/let_print_test.snek",
         expected: "5\n5",
     },
-
     {
         name: diamondback_sophia_test,
         file: "diamondback/sophia_test.snek",
         expected: "243\n244",
+    },
+    {
+        name: diamondback_fact_5,
+        file: "diamondback/fact.snek",
+        input: "5",
+        expected: "120"
+    },
+    {
+        name: diamondback_fact_10,
+        file: "diamondback/fact.snek",
+        input: "10",
+        expected: "3628800"
+    },
+    {
+        name: diamondback_even_odd_one_print,
+        file: "diamondback/even_odd_one_print.snek",
+        input: "1",
+        expected: "false"
+    },
+    {
+        name: diamondback_even_odd_11_print,
+        file: "diamondback/even_odd_one_print.snek",
+        input: "11",
+        expected: "false"
     },
 }
 
