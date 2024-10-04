@@ -408,7 +408,7 @@ fn compile_expr_to_instrs(
                 let instr_to_eval_arg = compile_expr_to_instrs(
                     arg,
                     scope_bindings.clone(),
-                    rsp_offset,
+                    curr_rsp_offset,
                     label_counter,
                     label_name,
                 );

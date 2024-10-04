@@ -32,7 +32,7 @@ pub fn is_keyword(id: &str) -> bool {
 
 pub fn id_to_string(id: &str) -> String {
     if is_keyword(id) {
-        panic!("Invalid id {:?}", id)
+        panic!("Invalid id {:?} is a keyword", id)
     }
     id.to_string()
 }

@@ -1,0 +1,9 @@
+(fun fib ((n int)) int
+    (if (< n 2) 1 (+ (fib (- n 1)) (fib (- n 2))))
+)
+
+(block 
+    (print (fib (- input 2)))
+    (print (fib (- input 1)))
+    (fib input)
+)

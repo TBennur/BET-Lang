@@ -72,7 +72,7 @@ fn type_check_expr(
         Expr::Boolean(b) => TypedExpr::Boolean(*b),
 
         Expr::Id(id) => match type_bindings.get(id) {
-            None => panic!("Invalid: Nonexistent binding in Id"),
+            None => panic!("Invalid: Unbound variable identifier {}", id),
             Some(t) => TypedExpr::Id(*t, id.clone()),
         },
         Expr::Number(n) => TypedExpr::Number(*n),
@@ -95,7 +95,7 @@ fn type_check_expr(
             // fails if the name isn't in scope
             let t1 = *match type_bindings.get(name) {
                 Some(t1) => t1,
-                None => panic!("Invalid: Non-existent binding in set"),
+                None => panic!("Invalid: Unbound variable identifier {}", name),
             };
 
             // can only "set" a variable to the same type within the current scope
@@ -307,14 +307,14 @@ fn type_check_expr(
             // check that function exists
             let fun_sig = match function_sigs.get(fun_name) {
                 Some(fun_sig) => fun_sig,
-                None => panic!("Called function {:?}, which doesn't exist", fun_name),
+                None => panic!("Invalid: Called function {:?}, which doesn't exist", fun_name),
             };
 
             let FunSignature::UserFun(return_type, param_types) = fun_sig;
 
             // check that there's the correct number of arguments
             if param_types.len() != arguments.len() {
-                panic!("Called function with wrong number of arguments")
+                panic!("Invalid: Called function with wrong number of arguments")
             }
 
             // check that arguments are well typed, and agree with function sig
