@@ -1,4 +1,4 @@
-use crate::{consts::{ENTRYPOINT_LABEL, MAIN_LABEL}, structs::*};
+use crate::{consts::{ENTRYPOINT_LABEL, MAIN_LABEL, OVERFLOW_LABEL}, structs::*};
 
 pub fn is_keyword(id: &str) -> bool {
     return vec![
@@ -25,7 +25,8 @@ pub fn is_keyword(id: &str) -> bool {
         "int",
         "bool",
         ENTRYPOINT_LABEL,
-        MAIN_LABEL
+        MAIN_LABEL,
+        OVERFLOW_LABEL
     ]
     .contains(&id);
 }

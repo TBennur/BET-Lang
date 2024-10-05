@@ -32,8 +32,6 @@ fn main() -> std::io::Result<()> {
 
     let result = compile_prog(&prog);
 
-    // println!("Expected: {}", compute(&expr));
-
     let asm_program = format!(
         "
 section .text

@@ -105,7 +105,7 @@ pub enum TypedExpr {
 #[derive(Clone, Debug)]
 pub enum FunSignature {
     // to insert into function signature hashmap, for type_check_expr
-    UserFun(ExprType, Vec<(ExprType, String)>),
+    Sig(ExprType, Vec<(ExprType, String)>),
 }
 
 pub enum TypedFunction {

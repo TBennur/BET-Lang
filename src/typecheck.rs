@@ -20,7 +20,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
     // typecheck each function
     for function in functions {
-        let UserFunction::UserFun(name, FunSignature::UserFun(ret_type, param_types), body) =
+        let UserFunction::UserFun(name, FunSignature::Sig(ret_type, param_types), body) =
             function;
 
         // insert args into type bindings
@@ -42,7 +42,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
         let typed_function = TypedFunction::Fun(
             name.to_string(),
-            FunSignature::UserFun(extract_type(&type_checked_body), param_types.to_vec()),
+            FunSignature::Sig(extract_type(&type_checked_body), param_types.to_vec()),
             type_checked_body,
         );
 
@@ -310,7 +310,7 @@ fn type_check_expr(
                 None => panic!("Invalid: Called function {:?}, which doesn't exist", fun_name),
             };
 
-            let FunSignature::UserFun(return_type, param_types) = fun_sig;
+            let FunSignature::Sig(return_type, param_types) = fun_sig;
 
             // check that there's the correct number of arguments
             if param_types.len() != arguments.len() {

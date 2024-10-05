@@ -2,6 +2,10 @@ use crate::consts::*;
 use crate::structs::*;
 use crate::typecheck::type_check_prog;
 
+/**
+ * Helper Function
+ */
+
 pub fn type_to_flag(t: ExprType) -> i32 {
     match t {
         ExprType::Int => INT_TYPE_FLAG,
@@ -21,6 +25,59 @@ fn generate_label(label_name: &String, label_counter: i64) -> String {
 fn compute_aligned_rsp_offset(rsp_offset: i32) -> i32 {
     return (rsp_offset / 16) * 16 - 8;
 }
+
+/**
+ * To String Functions
+ */
+
+fn instr_to_str(i: &Instr) -> String {
+    match i {
+        Instr::IMov(dst, src) => format!("\tmov {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
+        Instr::AddLabel(label) => format!("{}:", label.to_string()),
+        Instr::Jump(label) => format!("\tjmp {}", label.to_string()),
+        Instr::JumpGreater(label) => format!("\tjg {}", label.to_string()),
+        Instr::JumpGreaterEqual(label) => format!("\tjge {}", label.to_string()),
+        Instr::JumpEqual(label) => format!("\tje {}", label.to_string()),
+        Instr::JumpLessEqual(label) => format!("\tjle {}", label.to_string()),
+        Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
+        Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
+        Instr::Ret => "\tret".to_string(),
+    }
+}
+
+fn fn_to_str(f: &Function) -> String {
+    match f {
+        Function::SnekPrint => "snek_print".to_string(),
+        Function::SnekError => "snek_error".to_string(),
+        Function::Custom(name) => name.to_string(),
+    }
+}
+
+fn reg_to_str(r: &Reg) -> String {
+    match r {
+        Reg::RAX => "rax".to_string(),
+        Reg::RSP => "rsp".to_string(),
+        Reg::RSI => "rsi".to_string(),
+        Reg::RDI => "rdi".to_string(),
+    }
+}
+
+fn val_to_str(v: &Val) -> String {
+    match v {
+        Val::Reg(r) => reg_to_str(r),
+        Val::RegOffset(r, off) => format!("[{} + {}]", reg_to_str(r), off),
+        Val::Imm(x) => format!("{}", x),
+    }
+}
+
+/**
+ * Compilation Functions
+ */
 
 fn compile_bin_op_to_instrs(
     op: &Op2,
@@ -443,53 +500,8 @@ fn compile_expr_to_instrs(
     }
 }
 
-fn instr_to_str(i: &Instr) -> String {
-    match i {
-        Instr::IMov(dst, src) => format!("\tmov {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
-        Instr::AddLabel(label) => format!("{}:", label.to_string()),
-        Instr::Jump(label) => format!("\tjmp {}", label.to_string()),
-        Instr::JumpGreater(label) => format!("\tjg {}", label.to_string()),
-        Instr::JumpGreaterEqual(label) => format!("\tjge {}", label.to_string()),
-        Instr::JumpEqual(label) => format!("\tje {}", label.to_string()),
-        Instr::JumpLessEqual(label) => format!("\tjle {}", label.to_string()),
-        Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
-        Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
-        Instr::Ret => "\tret".to_string(),
-    }
-}
-
-fn fn_to_str(f: &Function) -> String {
-    match f {
-        Function::SnekPrint => "snek_print".to_string(),
-        Function::SnekError => "snek_error".to_string(),
-        Function::Custom(name) => name.to_string(),
-    }
-}
-
-fn reg_to_str(r: &Reg) -> String {
-    match r {
-        Reg::RAX => "rax".to_string(),
-        Reg::RSP => "rsp".to_string(),
-        Reg::RSI => "rsi".to_string(),
-        Reg::RDI => "rdi".to_string(),
-    }
-}
-
-fn val_to_str(v: &Val) -> String {
-    match v {
-        Val::Reg(r) => reg_to_str(r),
-        Val::RegOffset(r, off) => format!("[{} + {}]", reg_to_str(r), off),
-        Val::Imm(x) => format!("{}", x),
-    }
-}
-
 fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
-    let TypedFunction::Fun(fun_name, FunSignature::UserFun(_ret_type, args), typed_body) = f;
+    let TypedFunction::Fun(fun_name, FunSignature::Sig(_ret_type, args), typed_body) = f;
 
     // add the label for our code
     let mut instrs = vec![Instr::AddLabel(fun_name.to_string())];
@@ -541,7 +553,7 @@ pub fn compile_prog(p: &Prog) -> String {
     // compile program body, with the label __main
     let main = TypedFunction::Fun(
         MAIN_LABEL.to_string(),
-        FunSignature::UserFun(body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
+        FunSignature::Sig(body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
         typed_e,
     );
     all_instrs.extend(compile_fn(&main));
@@ -550,7 +562,7 @@ pub fn compile_prog(p: &Prog) -> String {
     let entrypoint = TypedFunction::Fun(
         // (print (main input : int ) : body_type ) : body_type
         ENTRYPOINT_LABEL.to_string(),
-        FunSignature::UserFun(body_type, Vec::new()), // unit -> body_type
+        FunSignature::Sig(body_type, Vec::new()), // unit -> body_type
         TypedExpr::UnOp(
             body_type,
             Op1::Print,
