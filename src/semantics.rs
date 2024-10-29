@@ -130,11 +130,6 @@ pub fn struct_name_to_type_enum(name: &String) -> i32 {
 }
 
 pub fn type_str_to_expr_type(s: &String) -> ExprType {
-    // definitely illegal type
-    if is_keyword(s) {
-        panic!("Invalid type: reserved keyword{:?}", s)
-    }
-
     // valid, known types
     if s == "int" {
         return ExprType::Int;
@@ -143,5 +138,11 @@ pub fn type_str_to_expr_type(s: &String) -> ExprType {
     }
 
     // we will assume that it's a pointer to a struct
+
+    // definitely illegal struct name
+    if is_keyword(s) {
+        panic!("Invalid type: reserved keyword{:?}", s)
+    }
+
     ExprType::StructPointer(struct_name_to_type_enum(s))
 }

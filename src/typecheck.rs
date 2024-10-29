@@ -81,39 +81,6 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
             }
         ).collect();
 
-        /*
-        for (field_type, field_name) in field_names {
-            let checked_type = match field_type {
-                /* --- valid base types (struct fields can't be functions) --- */
-                ExprType::Int => ExprType::Int,
-                ExprType::Bool => ExprType::Bool,
-
-                /* --- a field with type null?? illegal --- */
-                ExprType::Null => panic!(
-                    "Invalid: struct has field which expects type null ({}::{})",
-                    struct_name, field_name
-                ),
-
-                /* --- field with type pointer to struct... check that the struct it points to exists! --- */
-                ExprType::StructPointer(pointed_struct_enum) => {
-                    match struct_type_enum_to_name(pointed_struct_enum) {
-                        None => panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
-                        Some(pointed_struct_name) => match struct_enum_map.get(&pointed_struct_name) {
-                            None => panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
-                            Some(&lookup_res) => {
-                                if lookup_res != pointed_struct_enum {
-                                    panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
-                                }
-                                ExprType::StructPointer(lookup_res)
-                            },
-                        }
-                    }
-                }
-            };
-
-
-        }
-        */
         let struct_sig = StructSignature::Sig(checked_struct_fields);
 
         // push this sig into the struct type map
