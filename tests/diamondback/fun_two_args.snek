@@ -1,0 +1,6 @@
+(fun fun1 ((m int) (n int)) int
+    (* m n)
+)
+
+
+(+ (fun1 3 3) (fun1 4 4))

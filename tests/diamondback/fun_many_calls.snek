@@ -1,0 +1,14 @@
+(fun fun1 ((m int) (n int)) int
+    (* m n)
+)
+
+(let ((x 0)) 
+    (repeat-until
+        (block
+            (print (fun1 x input))
+            (set! x (add1 x))
+            0
+        )
+        (> x input)
+    )
+)
