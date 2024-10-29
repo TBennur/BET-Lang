@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub enum Prog {
-    Program(Vec<UserFunction>, Expr),
+    Program(Vec<UserStruct>, Vec<UserFunction>, Expr),
 }
 
 #[derive(Debug)]
@@ -77,12 +77,20 @@ pub enum Expr {
     Block(Vec<Expr>),
     Input,
     Call(String, Vec<Expr>),
+    /* --- new to egg-eater --- */
+    Null,
+    Alloc(String),
+    Update(Box<Expr>, String, Box<Expr>),
+    Lookup(Box<Expr>, String),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ExprType {
     Int,
     Bool,
+    /* --- new to egg-eater --- */
+    StructPointer(i32), // pointer to a struct, whose name is contained in STRUCT_TYPE_MAP
+    Null,
 }
 
 #[derive(Clone, PartialEq)]
@@ -99,7 +107,12 @@ pub enum TypedExpr {
     Block(ExprType, Vec<TypedExpr>),
     Call(ExprType, String, Vec<TypedExpr>), // ExprType is return type of call
     Input,
-    RDInput
+    RDInput,
+    /* --- New to egg-eater --- */
+    Null,
+    Alloc(ExprType),
+    Update(ExprType, Box<TypedExpr>, String, Box<TypedExpr>),
+    Lookup(ExprType, Box<TypedExpr>, String),
 }
 
 #[derive(Clone, Debug)]
@@ -113,6 +126,11 @@ pub enum TypedFunction {
     Fun(String, FunSignature, TypedExpr),
 }
 
+#[derive(Clone, Debug)]
+pub enum StructSignature {
+    Sig(Vec<(ExprType, String)>),
+}
+
 pub enum TypedProg {
     Program(ExprType, Vec<TypedFunction>, TypedExpr),
 }
@@ -122,12 +140,18 @@ pub enum UserFunction {
     UserFun(String, FunSignature, Expr),
 }
 
+#[derive(Debug)]
+pub enum UserStruct {
+    /* UserStruct(type_name, <(t1, field1name, ...)>) */
+    UserStruct(String, Vec<(ExprType, String)>),
+}
+
 pub fn extract_type(t: &TypedExpr) -> ExprType {
     match t {
         TypedExpr::Number(_) => ExprType::Int,
         TypedExpr::RDInput => ExprType::Int,
         TypedExpr::Boolean(_) => ExprType::Bool,
-        TypedExpr::Input=> ExprType::Int,
+        TypedExpr::Input => ExprType::Int,
         TypedExpr::Id(expr_type, _) => *expr_type,
         TypedExpr::Let(expr_type, _, _) => *expr_type,
         TypedExpr::UnOp(expr_type, _, _) => *expr_type,
@@ -137,5 +161,9 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         TypedExpr::Set(expr_type, _, _) => *expr_type,
         TypedExpr::Block(expr_type, _) => *expr_type,
         TypedExpr::Call(expr_type, _, _) => *expr_type,
+        TypedExpr::Null => ExprType::Null,
+        TypedExpr::Alloc(expr_type) => *expr_type,
+        TypedExpr::Update(expr_type, _, _, _) => *expr_type,
+        TypedExpr::Lookup(expr_type, _, _) => *expr_type,
     }
 }

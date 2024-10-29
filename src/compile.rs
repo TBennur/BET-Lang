@@ -10,6 +10,8 @@ pub fn type_to_flag(t: ExprType) -> i32 {
     match t {
         ExprType::Int => INT_TYPE_FLAG,
         ExprType::Bool => BOOL_TYPE_FLAG,
+        ExprType::StructPointer(_) => todo!(),
+        ExprType::Null => todo!(),
     }
 }
 
@@ -497,6 +499,10 @@ fn compile_expr_to_instrs(
 
             instructions
         }
+        TypedExpr::Null => todo!(),
+        TypedExpr::Alloc(_expr_type) => todo!(),
+        TypedExpr::Update(_expr_type, _typed_expr, _, _typed_expr1) => todo!(),
+        TypedExpr::Lookup(_expr_type, _typed_expr, _) => todo!(),
     }
 }
 

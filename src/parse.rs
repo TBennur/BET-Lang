@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::semantics::*;
 use crate::structs::*;
 use sexp::Atom::*;
@@ -14,6 +16,7 @@ fn parse_expr(s: &Sexp) -> Expr {
             "true" => Expr::Boolean(true),
             "false" => Expr::Boolean(false),
             "input" => Expr::Input,
+            "null" => Expr::Null,
             id => Expr::Id(id_to_string(id)), // panics if id is a keyword
         },
 
@@ -21,10 +24,33 @@ fn parse_expr(s: &Sexp) -> Expr {
         Sexp::List(vec) => match &vec[..] {
             // assume any vector whose first element isn't a keyword is a call
             [Sexp::Atom(S(fun_name)), args @ ..] if !is_keyword(fun_name) => Expr::Call(
-                fun_name.to_string(),
+                name_to_string(fun_name, NameType::FunName),
                 args.into_iter().map(parse_expr).collect(),
             ),
-            
+
+            // alloc
+            // has the form alloc <name>
+            [Sexp::Atom(S(op)), Sexp::Atom(S(struct_name))] if op == "alloc" => {
+                Expr::Alloc(name_to_string(struct_name, NameType::StructName))
+            }
+
+            // update
+            // has the form update e1 <name> e2
+            [Sexp::Atom(S(op)), e1, Sexp::Atom(S(field_name)), e2] if op == "update" => {
+                Expr::Update(
+                    Box::new(parse_expr(e1)),
+                    name_to_string(field_name, NameType::StructFieldName),
+                    Box::new(parse_expr(e2)),
+                )
+            }
+
+            // lookup
+            // has the form lookup e <name>
+            [Sexp::Atom(S(op)), e, Sexp::Atom(S(field_name))] if op == "lookup" => Expr::Lookup(
+                Box::new(parse_expr(e)),
+                name_to_string(field_name, NameType::StructFieldName),
+            ),
+
             // block
             // has the form block <expr>+
             [Sexp::Atom(S(op)), exprns @ ..] if op == "block" => {
@@ -119,59 +145,132 @@ fn parse_expr(s: &Sexp) -> Expr {
     }
 }
 
-fn parse_defn(s: &Sexp) -> UserFunction {
-    match s {
-        Sexp::List(decl) => match &decl[..] {
-            [Sexp::Atom(S(fun_keyword)), Sexp::Atom(S(fun_name)), Sexp::List(params), Sexp::Atom(S(ret_type)), fun_body]
-                if fun_keyword == "fun" =>
-            {
-                // check name
-                let ret_type = type_str_to_expr_type(ret_type);
+fn parse_struct_def(s: &Sexp) -> Option<UserStruct> {
+    // check if it could even be a struct defenition
+    let decl = match s {
+        Sexp::List(declaration) => declaration,
+        _ => return None,
+    };
 
-                // parse params
-                let mut params_vec: Vec<(ExprType, String)> = Vec::new();
-                for param_sexp in params {
-                    match param_sexp {
-                        Sexp::List(name_and_type) => match &name_and_type[..] {
-                            [Sexp::Atom(S(name)), Sexp::Atom(S(param_type))] => {
-                                if is_keyword(name) {
-                                    panic!("Invalid: Parameter shares name with reserved keyword")
-                                }
-                                params_vec
-                                    .push((type_str_to_expr_type(param_type), name.to_string()));
-                            }
-                            s => panic!("Invalid: Improperly formed parameter binding {:?}", s),
-                        },
-                        s => panic!("Invalid: Improperly formed parameter definition {:?}", s),
-                    }
-                }
+    let (struct_name, fields) = match &decl[..] {
+        [Sexp::Atom(S(s_keyword)), Sexp::Atom(S(s_name)), Sexp::List(_fields)]
+            if s_keyword == "struct" =>
+        {
+            (s_name, _fields)
+        }
+        _ => return None,
+    };
 
-                UserFunction::UserFun(
-                    fun_name.to_string(),
-                    FunSignature::Sig(ret_type, params_vec),
-                    parse_expr(fun_body),
-                )
-            }
+    // from here on, we know it must be a struct declaration; so panics instead of None
 
-            s => panic!("Invalid: Unknown vector expression {:?}", s),
-        },
-        s => panic!("Invalid: Unknown atomic expression {:?}", s),
+    // create a unique type enumeration for the struct, if it doesn't yet exist
+    type_str_to_expr_type(struct_name);
+
+    let mut fields_vec = Vec::new();
+    for f in fields {
+        let name_and_type = match f {
+            Sexp::List(_name_and_type) => _name_and_type,
+            _ => panic!("Invalid: Malformed struct field {:?}", f),
+        };
+
+        let tup = match &name_and_type[..] {
+            [Sexp::Atom(S(field_name)), Sexp::Atom(S(field_type))] => (
+                type_str_to_expr_type(field_type),
+                name_to_string(&field_name, NameType::StructFieldName), // panics if keyword
+            ),
+            _ => panic!("Invalid: Malformed struct field binding {:?}", f),
+        };
+        fields_vec.push(tup);
     }
+
+    Some(UserStruct::UserStruct(
+        // checks struct name isn't a reserved keyword
+        name_to_string(&struct_name, NameType::StructName),
+        fields_vec,
+    ))
+}
+
+fn parse_fn_def(s: &Sexp) -> Option<UserFunction> {
+    // check if it could even be a function defenition
+    let decl = match s {
+        Sexp::List(declaration) => declaration,
+        _ => return None,
+    };
+
+    let (fun_name, params, ret_type, fun_body) = match &decl[..] {
+        [Sexp::Atom(S(fun_keyword)), Sexp::Atom(S(fun_name)), Sexp::List(params), Sexp::Atom(S(ret_type)), fun_body]
+            if fun_keyword == "fun" =>
+        {
+            (fun_name, params, ret_type, fun_body)
+        }
+        _ => return None,
+    };
+
+    // from here on, we know it must be a function declaration; so panics instead of None
+
+    // check name (panics if keyword)
+    let fun_name = name_to_string(fun_name, NameType::FunName);
+
+    // get return type
+    let ret_type = type_str_to_expr_type(ret_type);
+
+    // parse params
+    let params_vec = params
+        .into_iter()
+        .map(|param| {
+            let name_and_type = match param {
+                Sexp::List(_name_and_type) => _name_and_type,
+                _ => panic!("Invalid: Improperly formed parameter definition {:?}", s),
+            };
+
+            match &name_and_type[..] {
+                [Sexp::Atom(S(name)), Sexp::Atom(S(param_type))] => (
+                    type_str_to_expr_type(param_type),
+                    name_to_string(name, NameType::FunParam),
+                ),
+                _ => panic!("Invalid: Improperly formed parameter binding {:?}", s),
+            }
+        })
+        .collect();
+
+    Some(UserFunction::UserFun(
+        fun_name,
+        FunSignature::Sig(ret_type, params_vec),
+        parse_expr(fun_body),
+    ))
 }
 
 pub fn parse_program(s: &Sexp) -> Prog {
-    match s {
-        Sexp::List(decl_and_body) => match decl_and_body.split_last() {
-            None => panic!("Invalid: Malformed program"),
+    let decl_and_body = match s {
+        Sexp::List(decl_and_body) => decl_and_body,
+        _ => panic!("Invalid: Program is an atom expression {:?}", s),
+    };
 
-            Some((expr, defenitions)) => {
-                // leave checking if function is defined for later
-                Prog::Program(
-                    defenitions.into_iter().map(parse_defn).collect(),
-                    parse_expr(expr),
-                )
-            }
-        },
-        s => panic!("Invalid: Program is an atom expression {:?}", s),
+    let (expr, defenitions) = match decl_and_body.split_last() {
+        Some((expr, defenitions)) => (expr, defenitions),
+        None => panic!("Invalid: Malformed program"),
+    };
+
+    let mut fn_defs = Vec::new();
+    let mut struct_defs = Vec::new();
+
+    // check whether function, struct, or error
+    for defenition in defenitions {
+        if let Some(parsed) = parse_fn_def(defenition) {
+            // must be a function
+            fn_defs.push(parsed);
+            continue;
+        }
+
+        if let Some(parsed) = parse_struct_def(defenition) {
+            // must be a struct
+            struct_defs.push(parsed);
+            continue;
+        }
+
+        // must be illegal!
+        panic!("Invalid: Improperly formed struct binding {:?}", s)
     }
+
+    Prog::Program(struct_defs, fn_defs, parse_expr(expr))
 }
