@@ -183,10 +183,14 @@ fn parse_struct_def(s: &Sexp) -> Option<UserStruct> {
         fields_vec.push(tup);
     }
 
+    if fields_vec.is_empty() {
+        panic!("Invalid: Struct declaration with no fields: {:?}", s)
+    }
+
     Some(UserStruct::UserStruct(
         // checks struct name isn't a reserved keyword
         name_to_string(&struct_name, NameType::StructName),
-        fields_vec,
+        StructSignature::Sig(fields_vec),
     ))
 }
 
@@ -246,8 +250,8 @@ pub fn parse_program(s: &Sexp) -> Prog {
         _ => panic!("Invalid: Program is an atom expression {:?}", s),
     };
 
-    let (expr, defenitions) = match decl_and_body.split_last() {
-        Some((expr, defenitions)) => (expr, defenitions),
+    let (expr, definitions) = match decl_and_body.split_last() {
+        Some((expr, definitions)) => (expr, definitions),
         None => panic!("Invalid: Malformed program"),
     };
 
@@ -255,21 +259,22 @@ pub fn parse_program(s: &Sexp) -> Prog {
     let mut struct_defs = Vec::new();
 
     // check whether function, struct, or error
-    for defenition in defenitions {
-        if let Some(parsed) = parse_fn_def(defenition) {
+    // Does not check whether referenced functions or structs exists (that's in typechecking)
+    for definition in definitions {
+        if let Some(parsed) = parse_fn_def(definition) {
             // must be a function
             fn_defs.push(parsed);
             continue;
         }
 
-        if let Some(parsed) = parse_struct_def(defenition) {
+        if let Some(parsed) = parse_struct_def(definition) {
             // must be a struct
             struct_defs.push(parsed);
             continue;
         }
 
         // must be illegal!
-        panic!("Invalid: Improperly formed struct binding {:?}", s)
+        panic!("Invalid: Improperly formed binding {:?}", s)
     }
 
     Prog::Program(struct_defs, fn_defs, parse_expr(expr))

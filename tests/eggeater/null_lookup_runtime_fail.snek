@@ -1,0 +1,6 @@
+(struct integer ((val int)))
+(fun make_nully () integer null)
+(let
+    ((x (make_nully)))
+    (lookup x val)
+)

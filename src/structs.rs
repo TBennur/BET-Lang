@@ -1,3 +1,7 @@
+use std::fmt;
+
+use crate::semantics::struct_type_enum_to_name;
+
 #[derive(Debug)]
 pub enum Prog {
     Program(Vec<UserStruct>, Vec<UserFunction>, Expr),
@@ -84,13 +88,29 @@ pub enum Expr {
     Lookup(Box<Expr>, String),
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum ExprType {
     Int,
     Bool,
     /* --- new to egg-eater --- */
-    StructPointer(i32), // pointer to a struct, whose name is contained in STRUCT_TYPE_MAP
+    StructPointer(i32), // pointer to a struct, whose name is contained in STRUCT_NUM_TO_NAME[i32]
     Null,
+}
+
+impl fmt::Debug for ExprType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExprType::Int => write!(f, "Int"),
+            ExprType::Bool => write!(f, "Bool"),
+            ExprType::StructPointer(struct_type_enum) => {
+                match struct_type_enum_to_name(*struct_type_enum) {
+                    Some(struct_name) => write!(f, "StructPointer({})", struct_name),
+                    None => write!(f, "Unrecognized StructPointer({})", struct_type_enum),
+                }
+            }
+            ExprType::Null => write!(f, "Null"),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -143,7 +163,7 @@ pub enum UserFunction {
 #[derive(Debug)]
 pub enum UserStruct {
     /* UserStruct(type_name, <(t1, field1name, ...)>) */
-    UserStruct(String, Vec<(ExprType, String)>),
+    UserStruct(String, StructSignature),
 }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {

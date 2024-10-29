@@ -1,5 +1,11 @@
 use im::HashMap;
 
+use crate::{
+    semantics::{struct_name_to_type_enum, struct_type_enum_to_name, STRUCT_NAME_TO_NUM},
+    structs::*,
+};
+
+/// Given a struct signature, lookup the type associated with the field with name field_name; or None if no such field exists
 fn struct_sig_type_of(struct_sig: &StructSignature, field_name: &String) -> Option<ExprType> {
     let StructSignature::Sig(field_names) = struct_sig;
     for (field_type, name) in field_names {
@@ -10,18 +16,15 @@ fn struct_sig_type_of(struct_sig: &StructSignature, field_name: &String) -> Opti
     None
 }
 
+/// Checks whether type `from` can be coerced to type `to`
 fn can_coerce(from: ExprType, to: ExprType) -> bool {
-    return from == to
+    return from == to // equal types can trivally be coerced
         || match to {
+            // (for now) the only non-equal types which can be coerced are Null pointers to (any) StructPointer
             ExprType::StructPointer(_) => from == ExprType::Null,
             _ => false,
         };
 }
-
-use crate::{
-    semantics::{struct_name_to_type_enum, struct_type_enum_to_name, STRUCT_NAME_TO_NUM},
-    structs::*,
-};
 
 pub fn type_check_prog(p: &Prog) -> TypedProg {
     let Prog::Program(structs, functions, body) = p;
@@ -47,7 +50,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
     // typecheck each struct (ie, all fields valid), building a map of {struct type enumeration => StructType }
     let mut struct_type_map: HashMap<String, StructSignature> = im::HashMap::new();
-    for UserStruct::UserStruct(struct_name, field_names) in structs {
+    for UserStruct::UserStruct(struct_name, StructSignature::Sig(field_names)) in structs {
         let checked_struct_fields = field_names.into_iter().map(
             | (field_type, field_name) |  {
                 let checked_field_type = match field_type {
@@ -69,7 +72,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
                                 None => panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
                                 Some(&lookup_res) => {
                                     if lookup_res != *pointed_struct_enum {
-                                        panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name);
+                                        panic!("Unexpected: mismatch in structure definitions {:?} {:?}", struct_name, field_name);
                                     }
                                     ExprType::StructPointer(lookup_res)
                                 },
@@ -121,7 +124,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
         );
 
         // compare to signature type
-        if *ret_type != extract_type(&type_checked_body) {
+        if !can_coerce(extract_type(&type_checked_body), *ret_type) {
             panic!("mismatched function signature & body");
         }
 
@@ -132,6 +135,17 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
         );
 
         typed_functions.push(typed_function);
+    }
+
+    /* --- Check that no functions have the same name as any struct --- */
+
+    for (struct_name, _) in struct_type_map.clone() {
+        if let Some(_) = function_sigs.get(&struct_name) {
+            panic!(
+                "Invalid: struct and fun declarations with the same name: {}",
+                struct_name
+            );
+        }
     }
 
     /* --- Typecheck Program Body --- */
@@ -205,10 +219,15 @@ fn type_check_expr(
                 struct_sigs.clone(),
                 allow_input,
             );
-            if extract_type(&t1_prime) != t1 {
-                panic!("Type mismatch in Set")
+
+            if !can_coerce(extract_type(&t1_prime), t1) {
+                panic!(
+                    "Type mismatch in Set (expected: {:?}, got: {:?})",
+                    t1,
+                    extract_type(&t1_prime)
+                )
             }
-            TypedExpr::Set(extract_type(&t1_prime), name.clone(), Box::new(t1_prime))
+            TypedExpr::Set(t1, name.clone(), Box::new(t1_prime))
         }
 
         Expr::Let(bindings, finally) => {
@@ -267,7 +286,7 @@ fn type_check_expr(
                 );
                 if extract_type(&a_typed_exprn) != ExprType::Int {
                     panic!("Type mismatch: BinOp argument not an Int");
-                }
+                } // Not changed, no subtyping for math [[EQ]]
 
                 let b_typed_exprn = type_check_expr(
                     b,
@@ -278,7 +297,7 @@ fn type_check_expr(
                 );
                 if extract_type(&b_typed_exprn) != ExprType::Int {
                     panic!("Type mismatch: BinOp argument not an Int");
-                }
+                } // Not changed, no subtyping for math [[EQ]]
 
                 TypedExpr::BinOp(
                     ExprType::Int,
@@ -304,7 +323,11 @@ fn type_check_expr(
                     struct_sigs.clone(),
                     allow_input,
                 );
-                if extract_type(&a_typed_exprn) != extract_type(&b_typed_exprn) {
+
+                // to allow checking equality between null and a pointer, allow type coersion
+                let a_type = extract_type(&a_typed_exprn);
+                let b_type = extract_type(&b_typed_exprn);
+                if !can_coerce(a_type, b_type) && !can_coerce(b_type, a_type){
                     panic!("Type mismatch: Equal has different argument types");
                 }
 
@@ -327,7 +350,7 @@ fn type_check_expr(
                 );
                 if extract_type(&a_typed_exprn) != ExprType::Int {
                     panic!("Type mismatch: BinOp argument not an Int");
-                }
+                } // Not changed, no subtyping for math [[EQ]]
 
                 let b_typed_exprn = type_check_expr(
                     b,
@@ -338,7 +361,7 @@ fn type_check_expr(
                 );
                 if extract_type(&b_typed_exprn) != ExprType::Int {
                     panic!("Type mismatch: BinOp argument not an Int");
-                }
+                } // Not changed, no subtyping for math [[EQ]]
 
                 TypedExpr::BinOp(
                     ExprType::Bool,
@@ -361,7 +384,7 @@ fn type_check_expr(
             );
             if extract_type(&typed_cond) != ExprType::Bool {
                 panic!("Type mismatch: If condition not an Bool");
-            };
+            }; // Not changed, no subtyping for conditions [[EQ]]
 
             let typed_if_true = type_check_expr(
                 val_if_true,
@@ -377,16 +400,30 @@ fn type_check_expr(
                 struct_sigs.clone(),
                 allow_input,
             );
-            if extract_type(&typed_if_true) == extract_type(&typed_if_false) {
-                TypedExpr::If(
-                    extract_type(&typed_if_true),
-                    Box::new(typed_cond),
-                    Box::new(typed_if_true),
-                    Box::new(typed_if_false),
-                )
+
+            let type_if_true = extract_type(&typed_if_true);
+            let type_if_false = extract_type(&typed_if_false);
+            let most_narrow_type: ExprType;
+            if can_coerce(type_if_true, type_if_false) {
+                // type_if_false is more narrow
+                most_narrow_type = type_if_false;
+            } else if can_coerce(type_if_false, type_if_true) {
+                // type_if_true is more narrow
+                most_narrow_type = type_if_true;
             } else {
-                panic!("Type mismatch: If clauses have different types")
+                // illegal; can't coerce branches to same type
+                panic!(
+                    "Type mismatch: If clauses have different types: (true){:?}, (false){:?}",
+                    type_if_true, type_if_false
+                )
             }
+
+            TypedExpr::If(
+                most_narrow_type,
+                Box::new(typed_cond),
+                Box::new(typed_if_true),
+                Box::new(typed_if_false),
+            )
         }
 
         // t1 * t2 => t1
@@ -401,7 +438,7 @@ fn type_check_expr(
             );
             if extract_type(&typed_stop_cond) != ExprType::Bool {
                 panic!("Type mismatch: RepeatUntil condition not an Bool")
-            }
+            } // Not changed, no subtyping for conditional [[EQ]]
 
             // repeat-until evaluates to the body (once stop_cond is true)
             let typed_body = type_check_expr(
@@ -463,7 +500,7 @@ fn type_check_expr(
                 arguments.iter().zip(param_types.iter()).collect();
 
             let mut typed_args = Vec::new();
-            for (arg_exp, (expr_type, _)) in zipped {
+            for (arg_exp, (expected_type, _)) in zipped {
                 let arg_typed = type_check_expr(
                     arg_exp,
                     type_bindings.clone(),
@@ -471,11 +508,11 @@ fn type_check_expr(
                     struct_sigs.clone(),
                     allow_input,
                 );
-
-                if extract_type(&arg_typed) != *expr_type {
+                // Should be able to call with null
+                if !can_coerce(extract_type(&arg_typed), *expected_type) {
                     panic!("Called function with mismatched arg types")
                 }
-
+                // TODO: should we coerce to use the expected type?
                 typed_args.push(arg_typed);
             }
 
@@ -490,7 +527,7 @@ fn type_check_expr(
                     TypedExpr::Alloc(ExprType::StructPointer(struct_type_int))
                 }
                 None => panic!(
-                    "Invalid: invalid allocate of unknown struct type: {}",
+                    "Invalid: allocation of unknown struct type: {}",
                     struct_type
                 ),
             }
@@ -516,19 +553,27 @@ fn type_check_expr(
             let pointed_struct_name = match struct_type_enum_to_name(pointed_struct_enum) {
                 Some(s) => s,
                 None => panic!(
-                    "Update with non-existent struct with type enumeration: {}",
+                    // type enum doesn't exist; should never happen
+                    "Unexpected: Update with non-existent struct with type enumeration: {}",
                     pointed_struct_enum
                 ),
             };
 
             let struct_sig = match struct_sigs.get(&pointed_struct_name) {
-                Some(sig) => sig,
-                None => panic!("Update with non-existent struct: {}", pointed_struct_name),
+                Some(sig) => sig, // struct name not in struct_sigs; shouldn't happen
+                None => panic!(
+                    "Unexpected: Update with non-existent struct signature: {}",
+                    pointed_struct_name
+                ),
             };
 
+            // this is an error which could actually happen
             let expected_type = match struct_sig_type_of(struct_sig, field_name) {
                 Some(expr_type) => expr_type,
-                None => panic!(""),
+                None => panic!(
+                    "Invalid: tried to update field name {} of struct {} which has no such field",
+                    pointed_struct_name, field_name
+                ),
             };
 
             // get the type of the new value
@@ -541,9 +586,9 @@ fn type_check_expr(
             );
             let update_type = extract_type(&update_typed_expr);
 
-            if expected_type != update_type && !can_coerce(update_type, expected_type) {
+            if !can_coerce(update_type, expected_type) {
                 panic!(
-                    "Invalid: Update type mismatch: expeced {:?} but got {:?}",
+                    "Invalid: Update type mismatch: expected {:?} but got {:?}",
                     expected_type, update_type
                 );
             }
@@ -567,28 +612,28 @@ fn type_check_expr(
             let pointed_struct_enum = match extract_type(&pointer_typed_expr) {
                 ExprType::StructPointer(struct_enum) => struct_enum,
                 _ => panic!(
-                    "Invalid: Update on non-pointer-typed expression: {:?}",
+                    "Invalid: Lookup on non-pointer-typed expression: {:?}",
                     pointer
-                ),
+                ), // should never happen, since type_check_expr only returns well-typed pointers
             };
 
             // the kind of struct it points to must have a corresponding field
             let pointed_struct_name = match struct_type_enum_to_name(pointed_struct_enum) {
                 Some(s) => s,
                 None => panic!(
-                    "Update with non-existent struct with type enumeration: {}",
+                    "Invalid: Lookup with non-existent struct with type enumeration: {}",
                     pointed_struct_enum
                 ),
             };
 
             let struct_sig = match struct_sigs.get(&pointed_struct_name) {
                 Some(sig) => sig,
-                None => panic!("Update with non-existent struct: {}", pointed_struct_name),
+                None => panic!("Unexpected: Lookup with non-existent struct: {}", pointed_struct_name),
             };
 
             let expected_type = match struct_sig_type_of(struct_sig, field_name) {
                 Some(expr_type) => expr_type,
-                None => panic!(""),
+                None => panic!("Invalid: Lookup nonexistent field"),
             };
 
             TypedExpr::Lookup(

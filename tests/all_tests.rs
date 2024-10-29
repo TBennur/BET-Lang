@@ -620,13 +620,12 @@ success_tests! {
         input: "9",
         expected: "9\nfalse\nfalse",
     },
-    // where the hell is this file???
-    // {
-    //     name: diamondback_fun_nested_call,
-    //     file: "diamondback/fun_nested_call.snek",
-    //     input: "20",
-    //     expected: "2100",
-    // },
+    {
+        name: diamondback_fun_nested_call,
+        file: "diamondback/fun_nested_call.snek",
+        input: "20",
+        expected: "2100",
+    },
     {
         name: diamondback_fun_two_args,
         file: "diamondback/fun_two_args.snek",
@@ -781,8 +780,67 @@ static_error_tests! {
         expected: "Duplicate Argument",
     },
 
-
-
+    // Our Egg Eater Tests
+    {
+        name: eggeater_duplicate_fun_struct,
+        file: "eggeater/duplicate_fun_struct_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_duplicate_struct,
+        file: "eggeater/duplicate_struct_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_empty_struct,
+        file: "eggeater/empty_struct_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_if_type_mismatch,
+        file: "eggeater/if_type_mismatch_fail.snek",
+        expected: "mismatch",
+    },
+    {
+        name: eggeater_invalid_update_field,
+        file: "eggeater/invalid_update_field_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_lookup_nonexistent,
+        file: "eggeater/lookup_nonexistent_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_lookup_nonpointer,
+        file: "eggeater/lookup_nonpointer_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_null_lookup_compile,
+        file: "eggeater/null_lookup_comp_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_set_null,
+        file: "eggeater/set_null_fail.snek",
+        expected: "mismatch",
+    },
+    {
+        name: eggeater_struct_null,
+        file: "eggeater/set_struct_fail.snek",
+        expected: "mismatch",
+    },
+    {
+        name: eggeater_update_nonexistent,
+        file: "eggeater/update_nonexistent_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_update_nonpointer,
+        file: "eggeater/update_nonpointer_fail.snek",
+        expected: "Invalid",
+    },
     ///// New-to-Cobra Auto Grader
 
     // Type errors

@@ -9,8 +9,15 @@ use std::{
 };
 
 static STRUCT_COUNTER: Mutex<i32> = Mutex::new(0);
+/// Maps a struct enumeration number to the name of the corresponding struct type
+///
+/// Can contain invalid structs (struct names which weren't declared) which will be detected at type-check
 pub static STRUCT_NUM_TO_NAME: Lazy<Mutex<HashMap<i32, String>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Maps the name of a struct to the struct enumeration assigned to that struct
+///
+/// Can contain invalid structs (struct names which weren't declared) which will be detected at type-check
 pub static STRUCT_NAME_TO_NUM: Lazy<Mutex<HashMap<String, i32>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 

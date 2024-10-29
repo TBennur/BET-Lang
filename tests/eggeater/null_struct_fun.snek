@@ -1,0 +1,11 @@
+(struct integer ((val int)))
+(fun null_integer () integer
+    null
+)
+(let
+    ((x (null_integer)))
+    (block
+        (set! x (alloc integer))
+        (update x val 10)
+    )
+)
