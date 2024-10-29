@@ -1,7 +1,12 @@
-use crate::{consts::{ENTRYPOINT_LABEL, MAIN_LABEL, OVERFLOW_LABEL}, structs::*};
+use crate::{
+    consts::{ENTRYPOINT_LABEL, MAIN_LABEL, OVERFLOW_LABEL},
+    structs::*,
+};
+use once_cell::sync::Lazy;
+use std::collections::HashSet;
 
-pub fn is_keyword(id: &str) -> bool {
-    return vec![
+static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
         "fun",
         "true",
         "false",
@@ -26,9 +31,12 @@ pub fn is_keyword(id: &str) -> bool {
         "bool",
         ENTRYPOINT_LABEL,
         MAIN_LABEL,
-        OVERFLOW_LABEL
-    ]
-    .contains(&id);
+        OVERFLOW_LABEL,
+    ])
+});
+
+pub fn is_keyword(id: &str) -> bool {
+    KEYWORDS.contains(id)
 }
 
 pub fn id_to_string(id: &str) -> String {
