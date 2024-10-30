@@ -1,0 +1,3 @@
+(struct ll ((val int) (next bst)))
+
+(let ((x (alloc ll))) (add1 5))

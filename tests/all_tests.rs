@@ -792,6 +792,11 @@ static_error_tests! {
         expected: "Invalid",
     },
     {
+        name: eggeater_duplicate_field,
+        file: "eggeater/duplicate_field_fail.snek",
+        expected: "Invalid",
+    },
+    {
         name: eggeater_empty_struct,
         file: "eggeater/empty_struct_fail.snek",
         expected: "Invalid",
@@ -814,6 +819,11 @@ static_error_tests! {
     {
         name: eggeater_lookup_nonpointer,
         file: "eggeater/lookup_nonpointer_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_invalid_field_type,
+        file: "eggeater/invalid_field_type_fail.snek",
         expected: "Invalid",
     },
     {
