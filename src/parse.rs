@@ -180,13 +180,7 @@ fn parse_struct_def(s: &Sexp) -> Option<UserStruct> {
 
         let tup = match &name_and_type[..] {
             [Sexp::Atom(S(field_name)), Sexp::Atom(S(field_type))] => {
-                
-                // Check field isn't a duplicate
-                for (_, cur_field_name) in fields_vec.iter_mut() {
-                    if cur_field_name == field_name {
-                        panic!("Invalid: Duplicate field {:?} in struct {:?}", field_name, struct_name);
-                    };
-                };
+                // Will check field isn't a duplicate in type-check
                 (
                     type_str_to_expr_type(field_type),
                     name_to_string(&field_name, NameType::StructFieldName), // panics if keyword

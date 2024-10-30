@@ -1,7 +1,7 @@
-use im::HashMap;
+use im::{HashMap, HashSet};
 
 use crate::{
-    semantics::{struct_name_to_type_enum, struct_type_enum_to_name, STRUCT_NAME_TO_NUM},
+    semantics::{struct_name_to_type_enum, struct_type_enum_to_name},
     structs::*,
 };
 
@@ -75,32 +75,39 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
     // typecheck each struct (ie, all fields valid), building a map of {struct type enumeration => StructType }
     let mut struct_type_map: HashMap<String, StructSignature> = im::HashMap::new();
     for UserStruct::UserStruct(struct_name, StructSignature::Sig(field_names)) in structs {
-        let checked_struct_fields = field_names.into_iter().map(
-            | (field_type, field_name) |  {
-                let checked_field_type = match field_type {
-                    /* --- valid base types (struct fields can't be functions) --- */
-                    ExprType::Int => ExprType::Int,
-                    ExprType::Bool => ExprType::Bool,
+        let mut checked_struct_fields: Vec<(ExprType, String)> = Vec::new();
+        let mut struct_fields_names: HashSet<String> = im::HashSet::new();
+        for (field_type, field_name) in field_names {
+            if let Some(_) = struct_fields_names.insert(field_name.to_string()) {
+                panic!(
+                    "Invalid: Duplicate field {:?} in struct {:?}",
+                    field_name, struct_name
+                );
+            }
 
-                    /* --- field with type pointer to struct... check that the struct it points to exists! --- */
-                    ExprType::StructPointer(pointed_struct_enum) => {
-                        match struct_type_enum_to_name(*pointed_struct_enum) {
+            let checked_field_type = match field_type {
+                /* --- valid base types (struct fields can't be functions) --- */
+                ExprType::Int => ExprType::Int,
+                ExprType::Bool => ExprType::Bool,
+
+                /* --- field with type pointer to struct... check that the struct it points to exists! --- */
+                ExprType::StructPointer(pointed_struct_enum) => {
+                    match struct_type_enum_to_name(*pointed_struct_enum) {
+                        None => panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
+                        Some(pointed_struct_name) => match struct_enum_map.get(&pointed_struct_name) {
                             None => panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
-                            Some(pointed_struct_name) => match struct_enum_map.get(&pointed_struct_name) {
-                                None => panic!("Invalid: struct {} has field {} which is a pointer to a non-declared struct type!", struct_name, field_name),
-                                Some(&lookup_res) => {
-                                    if lookup_res != *pointed_struct_enum {
-                                        panic!("Unexpected: mismatch in structure definitions {:?} {:?}", struct_name, field_name);
-                                    }
-                                    ExprType::StructPointer(lookup_res)
-                                },
-                            }
+                            Some(&lookup_res) => {
+                                if lookup_res != *pointed_struct_enum {
+                                    panic!("Unexpected: mismatch in structure definitions {:?} {:?}", struct_name, field_name);
+                                }
+                                ExprType::StructPointer(lookup_res)
+                            },
                         }
                     }
-                };
-            (checked_field_type, field_name.to_string())
-            }
-        ).collect();
+                }
+            };
+            checked_struct_fields.push((checked_field_type, field_name.to_string()));
+        }
 
         let struct_sig = StructSignature::Sig(checked_struct_fields);
 
