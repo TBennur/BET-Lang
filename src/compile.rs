@@ -51,11 +51,11 @@ fn instr_to_str(i: &Instr) -> String {
     }
 }
 
-fn fn_to_str(f: &Function) -> String {
+fn fn_to_str(f: &FunctionLabel) -> String {
     match f {
-        Function::SnekPrint => "snek_print".to_string(),
-        Function::SnekError => "snek_error".to_string(),
-        Function::Custom(name) => name.to_string(),
+        FunctionLabel::SnekPrint => "snek_print".to_string(),
+        FunctionLabel::SnekError => "snek_error".to_string(),
+        FunctionLabel::Custom(name) => name.to_string(),
     }
 }
 
@@ -230,7 +230,7 @@ fn compile_expr_to_instrs(
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
                     )); // Reset Alignment
 
-                    instructions.push(Instr::Call(Function::SnekPrint));
+                    instructions.push(Instr::Call(FunctionLabel::SnekPrint));
 
                     instructions.push(Instr::ISub(
                         Val::Reg(Reg::RSP),
@@ -489,7 +489,7 @@ fn compile_expr_to_instrs(
             )); // Reset Alignment
 
             // call the function
-            instructions.push(Instr::Call(Function::Custom(fun_name.to_string())));
+            instructions.push(Instr::Call(FunctionLabel::Custom(fun_name.to_string())));
 
             instructions.push(Instr::ISub(
                 Val::Reg(Reg::RSP),
@@ -583,7 +583,7 @@ pub fn compile_prog(p: &Prog) -> String {
     // a runtime error causes us to jump here before reaching the SnekPrint call
     // since this function doesn't typecheck in the current type system, write it in ASM
     all_instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
-    all_instrs.push(Instr::Call(Function::SnekError));
+    all_instrs.push(Instr::Call(FunctionLabel::SnekError));
     all_instrs.push(Instr::Ret);
 
     all_instrs
