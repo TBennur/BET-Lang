@@ -19,7 +19,7 @@
   | (block <expr>+)
   | (repeat-until <expr> <expr>)
   | (<name> <expr>*)
-  | null
+  | (null <name>)
   | (alloc <name>)
   | (lookup <expr> <name>)
   | (update <expr> <name> <expr>)

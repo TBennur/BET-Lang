@@ -16,7 +16,6 @@ fn parse_expr(s: &Sexp) -> Expr {
             "true" => Expr::Boolean(true),
             "false" => Expr::Boolean(false),
             "input" => Expr::Input,
-            "null" => Expr::Null,
             id => Expr::Id(id_to_string(id)), // panics if id is a keyword
         },
 
@@ -28,6 +27,12 @@ fn parse_expr(s: &Sexp) -> Expr {
                 args.into_iter().map(parse_expr).collect(),
             ),
 
+
+            // null
+            // has the form null <name>
+            [Sexp::Atom(S(op)), Sexp::Atom(S(struct_name))] if op == "null" => {
+                Expr::Null(name_to_string(struct_name, NameType::StructName))
+            }
             // alloc
             // has the form alloc <name>
             [Sexp::Atom(S(op)), Sexp::Atom(S(struct_name))] if op == "alloc" => {

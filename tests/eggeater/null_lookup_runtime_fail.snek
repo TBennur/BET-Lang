@@ -1,6 +1,5 @@
 (struct integer ((val int)))
-(fun make_nully () integer null)
 (let
-    ((x (make_nully)))
+    ((x (null integer)))
     (lookup x val)
 )

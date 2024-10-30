@@ -2,4 +2,4 @@
 
 (let 
     ((x (alloc integer)) (y 5)) 
-    (set! x null))
+    (set! x (null integer)))

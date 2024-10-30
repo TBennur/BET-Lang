@@ -822,15 +822,21 @@ static_error_tests! {
         expected: "Invalid",
     },
     {
-        name: eggeater_set_null,
+        name: eggeater_bad_null,
         file: "eggeater/set_null_fail.snek",
-        expected: "mismatch",
+        expected: "keyword",
     },
     {
         name: eggeater_struct_null,
         file: "eggeater/set_struct_fail.snek",
         expected: "mismatch",
     },
+    {
+        name: eggeater_null_int_ptr,
+        file: "eggeater/null_int_ptr.snek",
+        expected: "keyword",
+    },
+
     {
         name: eggeater_update_nonexistent,
         file: "eggeater/update_nonexistent_fail.snek",

@@ -1,3 +1,3 @@
 (struct ll ((val int) (next ll)))
 
-(let ((x (alloc ll))) (if true null x))
+(let ((x (alloc ll))) (if true (null ll) x))
