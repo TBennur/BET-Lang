@@ -698,6 +698,13 @@ success_tests! {
         expected: "55",
     },
 
+    // Egg Eater Tests
+    {
+        name: eggeater_alloc_temp,
+        file: "eggeater/alloc_unit_temp_delete.snek",
+        expected: "3",
+    },
+
 
 }
 
@@ -784,6 +791,11 @@ static_error_tests! {
     {
         name: eggeater_duplicate_fun_struct,
         file: "eggeater/duplicate_fun_struct_fail.snek",
+        expected: "Invalid",
+    },
+    {
+        name: eggeater_alloc_nonexistent_struct,
+        file: "eggeater/alloc_nonexistent_struct_fail.snek",
         expected: "Invalid",
     },
     {

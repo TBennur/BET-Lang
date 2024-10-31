@@ -1,4 +1,5 @@
 use std::env;
+use std::mem;
 
 #[link(name = "our_code")]
 extern "C" {
@@ -30,7 +31,7 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64) -> i64 {
     } else if type_flag == IS_INT {
         println!("{}", value);
     } else {
-        println!("unknown flag");
+        println!("unknown flag {}, {}", value, type_flag);
     }
     value
 }

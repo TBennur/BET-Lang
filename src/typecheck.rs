@@ -1,4 +1,4 @@
-use im::{HashMap, HashSet};
+use im::HashMap;
 
 use crate::{
     semantics::{struct_name_to_type_enum, struct_type_enum_to_name},
@@ -15,40 +15,6 @@ fn struct_sig_type_of(struct_sig: &StructSignature, field_name: &String) -> Opti
     }
     None
 }
-
-// /// Checks whether type `from` can be coerced to type `to`
-// fn can_coerce(from: ExprType, to: ExprType) -> bool {
-//     return from == to // equal types can trivally be coerced
-//         || match to {
-//             // (for now) the only non-equal types which can be coerced are Null pointers to (any) StructPointer
-//             ExprType::StructPointer(_) => from == ExprType::Null,
-//             _ => false,
-//         };
-// }
-
-// fn checked_struct_get_type_of(
-//     struct_sigs: im::HashMap<String, StructSignature>,
-//     struct_enum: i32,
-//     field_name: &String,
-// ) -> Result<ExprType, String> {
-//     let struct_name = match struct_type_enum_to_name(struct_enum) {
-//         Some(struct_name) => struct_name.to_string(),
-//         None => return Err(format!("no struct with type enumeration {}", struct_enum)),
-//     };
-
-//     let struct_sig = match struct_sigs.get(&struct_name) {
-//         Some(sig) => sig,
-//         None => return Err(format!("no struct signature for struct with name {}", struct_name)),
-//     };
-
-//     match struct_sig_type_of(struct_sig, field_name) {
-//         Some(field_type) => Ok(field_type),
-//         None => Err(format!(
-//             "struct {} has no field {}",
-//             struct_name, field_name
-//         )),
-//     }
-// }
 
 pub fn type_check_prog(p: &Prog) -> TypedProg {
     let Prog::Program(structs, functions, body) = p;
@@ -74,17 +40,19 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
     // typecheck each struct (ie, all fields valid), building a map of {struct type enumeration => StructType }
     let mut struct_type_map: HashMap<String, StructSignature> = im::HashMap::new();
+    let mut struct_layouts: HashMap<String, StructLayout> = im::HashMap::new();
     for UserStruct::UserStruct(struct_name, StructSignature::Sig(field_names)) in structs {
         let mut checked_struct_fields: Vec<(ExprType, String)> = Vec::new();
-        let mut struct_fields_names: HashSet<String> = im::HashSet::new();
+        let mut struct_fields_names: HashMap<String, i32> = im::HashMap::new();
+        let mut i = 0;
         for (field_type, field_name) in field_names {
-            if let Some(_) = struct_fields_names.insert(field_name.to_string()) {
+            if let Some(_) = struct_fields_names.insert(field_name.to_string(), i) {
                 panic!(
                     "Invalid: Duplicate field {:?} in struct {:?}",
                     field_name, struct_name
                 );
             }
-
+            i += 1;
             let checked_field_type = match field_type {
                 /* --- valid base types (struct fields can't be functions) --- */
                 ExprType::Int => ExprType::Int,
@@ -106,13 +74,16 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
                     }
                 }
             };
+
             checked_struct_fields.push((checked_field_type, field_name.to_string()));
         }
 
         let struct_sig = StructSignature::Sig(checked_struct_fields);
-
+        let struct_layout = StructLayout::Layout(struct_fields_names);
+        
         // push this sig into the struct type map
         struct_type_map.insert(struct_name.to_string(), struct_sig);
+        struct_layouts.insert(struct_name.to_string(), struct_layout);
     }
 
     /* --- Typecheck Functions --- */
@@ -183,7 +154,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
         struct_type_map.clone(),
         true,
     );
-    TypedProg::Program(extract_type(&typed_body), typed_functions, typed_body)
+    TypedProg::Program(extract_type(&typed_body), struct_layouts, typed_functions, typed_body)
 }
 
 fn type_check_expr(

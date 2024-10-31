@@ -1,4 +1,5 @@
 use std::fmt;
+use im::HashMap;
 
 use crate::semantics::struct_type_enum_to_name;
 
@@ -120,6 +121,8 @@ pub enum Prog {
     Program(Vec<UserStruct>, Vec<UserFunction>, Expr),
 }
 
+
+
 /* --- Type Checked --- */
 
 #[derive(Clone, PartialEq)]
@@ -149,10 +152,15 @@ pub enum TypedFunction {
     Fun(String, FunSignature, TypedExpr),
 }
 
+#[derive(Clone, Debug)]
+pub enum StructLayout {
+    Layout(HashMap<String, i32>),
+}
+
 pub enum TypedProg {
     // everything which will be compiled
     // structs aren't compiled-- they're reduced to sizes (alloc) and offsets (lookup, update)
-    Program(ExprType, Vec<TypedFunction>, TypedExpr),
+    Program(ExprType, HashMap<String, StructLayout>, Vec<TypedFunction>, TypedExpr),
 }
 
 /* --- For Compiling --- */
@@ -162,6 +170,7 @@ pub enum FunctionLabel {
     Custom(String),
     SnekPrint,
     SnekError,
+    Malloc,
 }
 
 #[derive(Debug)]

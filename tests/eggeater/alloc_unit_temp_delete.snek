@@ -1,0 +1,3 @@
+(struct ll ((val int) (next ll)))
+
+(alloc ll)

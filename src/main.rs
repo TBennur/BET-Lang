@@ -30,21 +30,8 @@ fn main() -> std::io::Result<()> {
         Err(err) => panic!("Invalid: Parsing failed with error {:?}", err),
     };
 
-    let result = compile_prog(&prog);
+    let asm_program = compile_prog(&prog);
 
-    let asm_program = format!(
-        "
-section .text
-
-extern snek_print
-extern snek_error
-
-global our_code_starts_here
-
-{}
-",
-        result
-    );
 
     let mut out_file = File::create(out_name)?;
     out_file.write_all(asm_program.as_bytes())?;

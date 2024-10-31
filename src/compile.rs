@@ -1,5 +1,8 @@
+use im::HashMap;
+
 use crate::consts::*;
 use crate::structs::*;
+use crate::semantics::STRUCT_NUM_TO_NAME;
 use crate::typecheck::type_check_prog;
 
 /**
@@ -10,7 +13,7 @@ pub fn type_to_flag(t: ExprType) -> i32 {
     match t {
         ExprType::Int => INT_TYPE_FLAG,
         ExprType::Bool => BOOL_TYPE_FLAG,
-        ExprType::StructPointer(_) => todo!(),
+        ExprType::StructPointer(_) => 3,
     }
 }
 
@@ -55,6 +58,7 @@ fn fn_to_str(f: &FunctionLabel) -> String {
     match f {
         FunctionLabel::SnekPrint => "snek_print".to_string(),
         FunctionLabel::SnekError => "snek_error".to_string(),
+        FunctionLabel::Malloc => "malloc".to_string(),
         FunctionLabel::Custom(name) => name.to_string(),
     }
 }
@@ -85,6 +89,7 @@ fn compile_bin_op_to_instrs(
     b: &TypedExpr, // first arg
     a: &TypedExpr, // second arg
     scope_bindings: im::HashMap<String, i32>,
+    struct_layouts: &im::HashMap<String, StructLayout>,
     mut rsp_offset: i32,
     label_counter: &mut i64,
     label_name: &String,
@@ -95,6 +100,7 @@ fn compile_bin_op_to_instrs(
     let instr_to_compute_a = compile_expr_to_instrs(
         a,
         scope_bindings.clone(),
+        &struct_layouts,
         rsp_offset,
         label_counter,
         label_name,
@@ -114,6 +120,7 @@ fn compile_bin_op_to_instrs(
     let inst_to_compute_b = compile_expr_to_instrs(
         b,
         scope_bindings.clone(),
+        &struct_layouts,
         rsp_offset,
         label_counter,
         label_name,
@@ -173,6 +180,7 @@ fn compile_bin_op_to_instrs(
 fn compile_expr_to_instrs(
     e: &TypedExpr,
     scope_bindings: im::HashMap<String, i32>,
+    struct_layouts: &im::HashMap<String, StructLayout>,
     rsp_offset: i32,
     label_counter: &mut i64,
     label_name: &String,
@@ -211,6 +219,7 @@ fn compile_expr_to_instrs(
             let mut instructions = compile_expr_to_instrs(
                 exp,
                 scope_bindings.clone(),
+                &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
@@ -247,6 +256,7 @@ fn compile_expr_to_instrs(
             b,
             a,
             scope_bindings,
+            &struct_layouts,
             rsp_offset,
             label_counter,
             label_name,
@@ -271,6 +281,7 @@ fn compile_expr_to_instrs(
                 let code_to_eval_exp = compile_expr_to_instrs(
                     exp,
                     curr_let_binding.clone(),
+                    &struct_layouts,
                     rsp_offset,
                     label_counter,
                     label_name,
@@ -293,6 +304,7 @@ fn compile_expr_to_instrs(
             instructions_to_compile_let.extend(compile_expr_to_instrs(
                 final_expr,
                 curr_let_binding,
+                &struct_layouts,
                 curr_rsp_offset,
                 label_counter,
                 label_name,
@@ -308,6 +320,7 @@ fn compile_expr_to_instrs(
             let code_to_eval_expr = compile_expr_to_instrs(
                 expr,
                 scope_bindings.clone(),
+                &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
@@ -322,6 +335,7 @@ fn compile_expr_to_instrs(
             let code_to_eval_expr2 = compile_expr_to_instrs(
                 expr2,
                 scope_bindings.clone(),
+                &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
@@ -336,6 +350,7 @@ fn compile_expr_to_instrs(
             let code_to_eval_expr1 = compile_expr_to_instrs(
                 expr1,
                 scope_bindings.clone(),
+                &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
@@ -360,6 +375,7 @@ fn compile_expr_to_instrs(
             instructions_to_compile_set.extend(compile_expr_to_instrs(
                 expr,
                 scope_bindings.clone(),
+                &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
@@ -387,6 +403,7 @@ fn compile_expr_to_instrs(
                 instructions_to_compile_block.extend(compile_expr_to_instrs(
                     exp,
                     scope_bindings.clone(),
+                    &struct_layouts,
                     rsp_offset,
                     label_counter,
                     label_name,
@@ -408,6 +425,7 @@ fn compile_expr_to_instrs(
             instructions_to_compile_repeat_until.extend(compile_expr_to_instrs(
                 body,
                 scope_bindings.clone(),
+                &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
@@ -424,6 +442,7 @@ fn compile_expr_to_instrs(
             instructions_to_compile_repeat_until.extend(compile_expr_to_instrs(
                 stop_cond,
                 scope_bindings.clone(),
+                &struct_layouts,
                 id_rsp_offset,
                 label_counter,
                 label_name,
@@ -468,6 +487,7 @@ fn compile_expr_to_instrs(
                 let instr_to_eval_arg = compile_expr_to_instrs(
                     arg,
                     scope_bindings.clone(),
+                    &struct_layouts,
                     curr_rsp_offset,
                     label_counter,
                     label_name,
@@ -498,14 +518,35 @@ fn compile_expr_to_instrs(
 
             instructions
         }
-        TypedExpr::Null(_expr_type) => todo!(),
-        TypedExpr::Alloc(_expr_type) => todo!(),
+        TypedExpr::Null(_) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
+        TypedExpr::Alloc(expr_type) => {
+            let mut instructions = Vec::new();
+            let type_string = match expr_type {
+                ExprType::Bool => panic!("Unexpected: Attempted to create a Bool pointer. This should not happen"),
+                ExprType::Int => panic!("Unexpected: Attempted to create an Int pointer. This should not happen"),
+                ExprType::StructPointer(n) => {
+                    let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
+                    let res = num_to_name_map.get(&n);
+                    match res {
+                        Some(s) => s.to_string(),
+                        None => panic!("Unexpected: Broken structure enumeration. This should not happen"),
+                    }
+                },
+            };
+            let size = match struct_layouts.get(&type_string) {
+                Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
+                None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
+            };
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(size)));
+            instructions.push(Instr::Call(FunctionLabel::Malloc));
+            instructions
+        },
         TypedExpr::Update(_expr_type, _typed_expr, _, _typed_expr1) => todo!(),
         TypedExpr::Lookup(_expr_type, _typed_expr, _) => todo!(),
     }
 }
 
-fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
+fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>) -> Vec<Instr> {
     let TypedFunction::Fun(fun_name, FunSignature::Sig(_ret_type, args), typed_body) = f;
 
     // add the label for our code
@@ -535,6 +576,7 @@ fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
     instrs.extend(compile_expr_to_instrs(
         typed_body,
         scope_bindings,
+        &struct_layouts,
         init_rsp_offset,
         &mut label_counter,
         fun_name,
@@ -547,12 +589,12 @@ fn compile_fn(f: &TypedFunction) -> Vec<Instr> {
 }
 
 pub fn compile_prog(p: &Prog) -> String {
-    let TypedProg::Program(body_type, typed_funs, typed_e) = type_check_prog(p);
+    let TypedProg::Program(body_type, struct_layouts, typed_funs, typed_e) = type_check_prog(p);
 
     let mut all_instrs = Vec::new();
 
     for typed_fun in typed_funs {
-        all_instrs.extend(compile_fn(&typed_fun));
+        all_instrs.extend(compile_fn(&typed_fun, &struct_layouts));
     }
 
     // compile program body, with the label __main
@@ -561,7 +603,7 @@ pub fn compile_prog(p: &Prog) -> String {
         FunSignature::Sig(body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
         typed_e,
     );
-    all_instrs.extend(compile_fn(&main));
+    all_instrs.extend(compile_fn(&main, &struct_layouts));
 
     // compile the entrypoint, which loads RDI (input) onto the stack, then calls __main
     let entrypoint = TypedFunction::Fun(
@@ -578,7 +620,7 @@ pub fn compile_prog(p: &Prog) -> String {
             )),
         ),
     );
-    all_instrs.extend(compile_fn(&entrypoint));
+    all_instrs.extend(compile_fn(&entrypoint, &struct_layouts));
 
     // a runtime error causes us to jump here before reaching the SnekPrint call
     // since this function doesn't typecheck in the current type system, write it in ASM
@@ -586,9 +628,25 @@ pub fn compile_prog(p: &Prog) -> String {
     all_instrs.push(Instr::Call(FunctionLabel::SnekError));
     all_instrs.push(Instr::Ret);
 
-    all_instrs
+    let instrs_string = all_instrs
         .into_iter()
         .map(|instr| format!("  {}", instr_to_str(&instr)))
         .collect::<Vec<String>>()
-        .join("\n")
+        .join("\n");
+
+    let full_program = format!(
+        "
+section .text
+
+extern snek_print
+extern malloc
+extern snek_error
+
+global our_code_starts_here
+
+{}
+",
+        instrs_string
+);
+    full_program
 }
