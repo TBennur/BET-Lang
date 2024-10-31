@@ -6,7 +6,10 @@
 		(y (alloc ll)) 
 	) 
 	(block 
-		(print x)
-		y
+		(update x val 1)  
+		(update x next y)  
+		(update y val 2)  
+		(print (lookup x val))
+		(lookup (lookup x next) val)
 	)
 )

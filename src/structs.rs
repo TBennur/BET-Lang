@@ -1,5 +1,5 @@
-use std::fmt;
 use im::HashMap;
+use std::fmt;
 
 use crate::semantics::struct_type_enum_to_name;
 
@@ -121,8 +121,6 @@ pub enum Prog {
     Program(Vec<UserStruct>, Vec<UserFunction>, Expr),
 }
 
-
-
 /* --- Type Checked --- */
 
 #[derive(Clone, PartialEq)]
@@ -160,7 +158,12 @@ pub enum StructLayout {
 pub enum TypedProg {
     // everything which will be compiled
     // structs aren't compiled-- they're reduced to sizes (alloc) and offsets (lookup, update)
-    Program(ExprType, HashMap<String, StructLayout>, Vec<TypedFunction>, TypedExpr),
+    Program(
+        ExprType,
+        HashMap<String, StructLayout>,
+        Vec<TypedFunction>,
+        TypedExpr,
+    ),
 }
 
 /* --- For Compiling --- */
@@ -170,7 +173,6 @@ pub enum FunctionLabel {
     Custom(String),
     SnekPrint,
     SnekError,
-    Malloc,
 }
 
 #[derive(Debug)]
@@ -178,11 +180,13 @@ pub enum Val {
     Reg(Reg),
     Imm(i32),
     RegOffset(Reg, i32),
+    Global(String), // the name of a global, register containing offset
 }
 
 #[derive(Debug)]
 pub enum Reg {
     RAX,
+    RBX,
     RSP,
     RSI,
     RDI,
@@ -205,4 +209,5 @@ pub enum Instr {
     JumpLess(String),
     JumpOverflow(String),
     Ret,
+    Lea(Val, Val), // loads the efective address of the second val into the first
 }

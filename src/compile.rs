@@ -1,8 +1,8 @@
 use im::HashMap;
 
 use crate::consts::*;
-use crate::structs::*;
 use crate::semantics::STRUCT_NUM_TO_NAME;
+use crate::structs::*;
 use crate::typecheck::type_check_prog;
 
 /**
@@ -51,6 +51,7 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
         Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
         Instr::Ret => "\tret".to_string(),
+        Instr::Lea(dst, src) => format!("\tlea {}, [rel {}]", val_to_str(dst), val_to_str(src)),
     }
 }
 
@@ -58,7 +59,6 @@ fn fn_to_str(f: &FunctionLabel) -> String {
     match f {
         FunctionLabel::SnekPrint => "snek_print".to_string(),
         FunctionLabel::SnekError => "snek_error".to_string(),
-        FunctionLabel::Malloc => "malloc".to_string(),
         FunctionLabel::Custom(name) => name.to_string(),
     }
 }
@@ -66,6 +66,7 @@ fn fn_to_str(f: &FunctionLabel) -> String {
 fn reg_to_str(r: &Reg) -> String {
     match r {
         Reg::RAX => "rax".to_string(),
+        Reg::RBX => "rbx".to_string(),
         Reg::RSP => "rsp".to_string(),
         Reg::RSI => "rsi".to_string(),
         Reg::RDI => "rdi".to_string(),
@@ -77,6 +78,7 @@ fn val_to_str(v: &Val) -> String {
         Val::Reg(r) => reg_to_str(r),
         Val::RegOffset(r, off) => format!("[{} + {}]", reg_to_str(r), off),
         Val::Imm(x) => format!("{}", x),
+        Val::Global(global_name) => format!("{}", global_name),
     }
 }
 
@@ -522,54 +524,72 @@ fn compile_expr_to_instrs(
         TypedExpr::Alloc(expr_type) => {
             let mut instructions = Vec::new();
             let type_string = match expr_type {
-                ExprType::Bool => panic!("Unexpected: Attempted to create a Bool pointer. This should not happen"),
-                ExprType::Int => panic!("Unexpected: Attempted to create an Int pointer. This should not happen"),
+                ExprType::Bool => {
+                    panic!("Unexpected: Attempted to create a Bool pointer. This should not happen")
+                }
+                ExprType::Int => {
+                    panic!("Unexpected: Attempted to create an Int pointer. This should not happen")
+                }
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
                     let res = num_to_name_map.get(&n);
                     match res {
                         Some(s) => s.to_string(),
-                        None => panic!("Unexpected: Broken structure enumeration. This should not happen"),
+                        None => panic!(
+                            "Unexpected: Broken structure enumeration. This should not happen"
+                        ),
                     }
-                },
+                }
             };
             let size = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
                 None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
             };
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64 * size)));
-            instructions.push(Instr::Call(FunctionLabel::Malloc));
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(0)));
-            
-            // Convert to calloc - set values to 0
-            for i in 0..(size.clone()) {
-                instructions.push(Instr::IMov(Val::RegOffset(Reg::RAX, (SIZEOF_I_64 * i) as i32), Val::Reg(Reg::RDI)));
-            };
-            
 
+            let alloc_size = SIZEOF_I_64 * size;
+
+            // check how many bytes we've allocated (stored in RDX)
+
+            // logic: if (RDX + alloc_size) > BUFFER_SIZE, go to OVERFLOW_LABEL
+            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := num bytes allocated
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(alloc_size))); // rax := num bytes allocated + num bytes needed
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(BUFFER_SIZE))); // if (num bytes allocated + num bytes needed) > BUFFER_SIZE:
+            instructions.push(Instr::JumpGreater(OVERFLOW_LABEL.to_string())); // jump to OVERFLOW_LABEL
+
+            
+            // we have enough room; get the address of bump_array[rbx]
+            instructions.push(Instr::Lea(Val::Reg(Reg::RAX), Val::Global(BUFFER_NAME.to_string()))); // rax := &array
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := &array + rbx
+
+            // update the total bytes allocated, so that the next alloc points to next free addrr
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RBX), Val::Imm(alloc_size))); // rbx := num bytes allocated + num bytes needed
             instructions
-        },
+        }
         TypedExpr::Update(_, typed_expr, field_name, typed_expr_val) => {
             let mut instructions = Vec::new();
             let expr_type = extract_type(typed_expr);
             let type_string = match expr_type {
-                ExprType::Bool => panic!("Unexpected: Attempted to access a Bool pointer. This should not happen"),
-                ExprType::Int => panic!("Unexpected: Attempted to access an Int pointer. This should not happen"),
+                ExprType::Bool => {
+                    panic!("Unexpected: Attempted to access a Bool pointer. This should not happen")
+                }
+                ExprType::Int => {
+                    panic!("Unexpected: Attempted to access an Int pointer. This should not happen")
+                }
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
                     let res = num_to_name_map.get(&n);
                     match res {
                         Some(s) => s.to_string(),
-                        None => panic!("Unexpected: Broken structure enumeration. This should not happen"),
+                        None => panic!(
+                            "Unexpected: Broken structure enumeration. This should not happen"
+                        ),
                     }
-                },
+                }
             };
             let offset = match struct_layouts.get(&type_string) {
-                Some(StructLayout::Layout(layout_dict)) => {
-                    match layout_dict.get(field_name) {
-                        Some(i) => i,
-                        None => panic!("Unexpected: Missing field. This should not happen"),
-                    }
+                Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
+                    Some(i) => i,
+                    None => panic!("Unexpected: Missing field. This should not happen"),
                 },
                 None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
             };
@@ -598,36 +618,43 @@ fn compile_expr_to_instrs(
                 label_name,
             );
             instructions.extend(instr_to_get_struct);
-            
+
             instructions.push(Instr::IMov(
                 Val::Reg(Reg::RDI),
                 Val::RegOffset(Reg::RSP, cur_rsp_offset),
             ));
-            instructions.push(Instr::IMov(Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset), Val::Reg(Reg::RDI)));
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset),
+                Val::Reg(Reg::RDI),
+            ));
 
             instructions
-        },
+        }
         TypedExpr::Lookup(_, typed_expr, field_name) => {
             let mut instructions = Vec::new();
             let expr_type = extract_type(typed_expr);
             let type_string = match expr_type {
-                ExprType::Bool => panic!("Unexpected: Attempted to access a Bool pointer. This should not happen"),
-                ExprType::Int => panic!("Unexpected: Attempted to access an Int pointer. This should not happen"),
+                ExprType::Bool => {
+                    panic!("Unexpected: Attempted to access a Bool pointer. This should not happen")
+                }
+                ExprType::Int => {
+                    panic!("Unexpected: Attempted to access an Int pointer. This should not happen")
+                }
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
                     let res = num_to_name_map.get(&n);
                     match res {
                         Some(s) => s.to_string(),
-                        None => panic!("Unexpected: Broken structure enumeration. This should not happen"),
+                        None => panic!(
+                            "Unexpected: Broken structure enumeration. This should not happen"
+                        ),
                     }
-                },
+                }
             };
             let offset = match struct_layouts.get(&type_string) {
-                Some(StructLayout::Layout(layout_dict)) => {
-                    match layout_dict.get(field_name) {
-                        Some(i) => i,
-                        None => panic!("Unexpected: Missing field. This should not happen"),
-                    }
+                Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
+                    Some(i) => i,
+                    None => panic!("Unexpected: Missing field. This should not happen"),
                 },
                 None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
             };
@@ -643,10 +670,13 @@ fn compile_expr_to_instrs(
             );
             instructions.extend(instr_to_get_struct);
 
-            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset)));
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset),
+            ));
 
             instructions
-        },
+        }
     }
 }
 
@@ -655,6 +685,10 @@ fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>)
 
     // add the label for our code
     let mut instrs = vec![Instr::AddLabel(fun_name.to_string())];
+
+    if fun_name.clone() == ENTRYPOINT_LABEL {
+        instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Imm(0)))
+    } 
 
     let init_rsp_offset = 0; // the body of a function expects RSP has been adjusted
     let mut label_counter = 0; // function names should be unique, so can reset counter
@@ -740,17 +774,20 @@ pub fn compile_prog(p: &Prog) -> String {
 
     let full_program = format!(
         "
+section .bss
+global {BUFFER_NAME}
+{BUFFER_NAME}: resb {BUFFER_SIZE} ; reserve {BUFFER_SIZE} bytes for array
+
 section .text
 
 extern snek_print
-extern malloc
 extern snek_error
 
 global our_code_starts_here
-
 {}
+
 ",
-        instrs_string
-);
+        instrs_string,
+    );
     full_program
 }

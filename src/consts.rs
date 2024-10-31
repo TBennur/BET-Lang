@@ -1,5 +1,7 @@
 pub const SIZEOF_I_64: i32 = 8; // size of an integer in bytes
 
+pub const BUFFER_NAME: &str = "bump_array";
+pub const BUFFER_SIZE: i32 = 1024;
 /**
  * Function Labels for Internal Language Infra
  */
