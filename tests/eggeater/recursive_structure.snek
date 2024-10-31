@@ -1,3 +1,12 @@
 (struct ll ((val int) (next ll)))
 
-(let ((x (alloc ll))) (add1 5))
+(let 
+	(
+		(x (alloc ll)) 
+		(y (alloc ll)) 
+	) 
+	(block 
+		(print x)
+		y
+	)
+)
