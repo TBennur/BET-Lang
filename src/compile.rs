@@ -537,12 +537,59 @@ fn compile_expr_to_instrs(
                 Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
                 None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
             };
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(size)));
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64 * size)));
             instructions.push(Instr::Call(FunctionLabel::Malloc));
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(0)));
+            
+            // Convert to calloc - set values to 0
+            for i in 0..(size.clone()) {
+                instructions.push(Instr::IMov(Val::RegOffset(Reg::RAX, (SIZEOF_I_64 * i) as i32), Val::Reg(Reg::RDI)));
+            };
+            
+
             instructions
         },
         TypedExpr::Update(_expr_type, _typed_expr, _, _typed_expr1) => todo!(),
-        TypedExpr::Lookup(_expr_type, _typed_expr, _) => todo!(),
+        TypedExpr::Lookup(_, typed_expr, field_name) => {
+            let mut instructions = Vec::new();
+            let expr_type = extract_type(typed_expr);
+            let type_string = match expr_type {
+                ExprType::Bool => panic!("Unexpected: Attempted to access a Bool pointer. This should not happen"),
+                ExprType::Int => panic!("Unexpected: Attempted to access an Int pointer. This should not happen"),
+                ExprType::StructPointer(n) => {
+                    let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
+                    let res = num_to_name_map.get(&n);
+                    match res {
+                        Some(s) => s.to_string(),
+                        None => panic!("Unexpected: Broken structure enumeration. This should not happen"),
+                    }
+                },
+            };
+            let offset = match struct_layouts.get(&type_string) {
+                Some(StructLayout::Layout(layout_dict)) => {
+                    match layout_dict.get(field_name) {
+                        Some(i) => i,
+                        None => panic!("Unexpected: Missing field. This should not happen"),
+                    }
+                },
+                None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
+            };
+
+            // Add type safety
+            let instr_to_get_struct = compile_expr_to_instrs(
+                typed_expr,
+                scope_bindings.clone(),
+                &struct_layouts,
+                rsp_offset,
+                label_counter,
+                label_name,
+            );
+            instructions.extend(instr_to_get_struct);
+
+            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset)));
+
+            instructions
+        },
     }
 }
 

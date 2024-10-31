@@ -1,5 +1,4 @@
 use std::env;
-use std::mem;
 
 #[link(name = "our_code")]
 extern "C" {

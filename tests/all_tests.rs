@@ -701,8 +701,8 @@ success_tests! {
     // Egg Eater Tests
     {
         name: eggeater_alloc_temp,
-        file: "eggeater/alloc_unit_temp_delete.snek",
-        expected: "3",
+        file: "eggeater/alloc_zero_test.snek",
+        expected: "0",
     },
 
 
