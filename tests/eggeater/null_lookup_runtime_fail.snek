@@ -1,5 +1,0 @@
-(struct integer ((val int)))
-(let
-    ((x (null integer)))
-    (lookup x val)
-)

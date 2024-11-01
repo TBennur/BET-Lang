@@ -704,7 +704,21 @@ success_tests! {
         file: "eggeater/alloc_zero_test.snek",
         expected: "0",
     },
-
+    {
+        name: eggeater_null_comparison,
+        file: "eggeater/null_comparison.snek",
+        expected: "false",
+    },
+    {
+        name: eggeater_null_equality,
+        file: "eggeater/null_equality.snek",
+        expected: "true",
+    },
+    {
+        name: eggeater_recursive_structure,
+        file: "eggeater/recursive_structure.snek",
+        expected:"1\n2"
+    },
 
 }
 
@@ -742,6 +756,32 @@ runtime_error_tests! {
         expected: "overflow",
     },
 
+    // New to Eggeater
+    {
+        name: eggeater_alloc_out_of_space_fail,
+        file: "eggeater/allocator_overflow_error_fail.snek",
+        expected: "out of space",
+    },
+    {
+        name: eggeater_update_null_dereference_fail,
+        file: "eggeater/update_null_dereference_fail.snek",
+        expected: "null dereference",
+    },
+    {
+        name: eggeater_lookup_null_dereference_fail,
+        file: "eggeater/lookup_null_dereference_fail.snek",
+        expected: "null dereference",
+    },
+    {
+        name: eggeater_update_null_fail,
+        file: "eggeater/update_null_fail.snek",
+        expected: "null dereference",
+    },
+    {
+        name: eggeater_lookup_null_fail,
+        file: "eggeater/lookup_null_fail.snek",
+        expected: "null dereference",
+    },
 }
 
 static_error_tests! {

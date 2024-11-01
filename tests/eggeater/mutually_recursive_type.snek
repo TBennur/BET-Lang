@@ -1,4 +1,0 @@
-(struct llmr ((val int) (next bstmr)))
-(struct bstmr ((val int) (left llmr) (right llmr)))
-
-(alloc llmr)

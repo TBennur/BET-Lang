@@ -1,0 +1,4 @@
+; A program with a function that takes an x and a y coordinate and produces a 
+; structure with those values, and a function that takes two points and returns 
+; a new point with their x and y coordinates added together, along with several 
+; tests that print example output from calling these functions.

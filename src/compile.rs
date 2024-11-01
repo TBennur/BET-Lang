@@ -621,6 +621,10 @@ fn compile_expr_to_instrs(
                 label_name,
             );
             instructions.extend(instr_to_get_struct);
+            
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3))); 
+            instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
             instructions.push(Instr::IMov(
                 Val::Reg(Reg::RDI),
@@ -662,7 +666,7 @@ fn compile_expr_to_instrs(
                 None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
             };
 
-            // Add type safety
+            
             let instr_to_get_struct = compile_expr_to_instrs(
                 typed_expr,
                 scope_bindings.clone(),
@@ -671,8 +675,15 @@ fn compile_expr_to_instrs(
                 label_counter,
                 label_name,
             );
+            // struct ptr is now in rax
             instructions.extend(instr_to_get_struct);
 
+            // if struct ptr is null, die
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3))); 
+            instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // didn't die, so struct ptr isn't null, so access
             instructions.push(Instr::IMov(
                 Val::Reg(Reg::RAX),
                 Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset),

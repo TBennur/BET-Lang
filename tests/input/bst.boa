@@ -1,0 +1,4 @@
+; A program that illustrates how your language enables the creation of binary 
+; search trees, and implements functions to add an element and check if an 
+; element is in the tree. Include several tests that print example output from
+; calling these functions.
