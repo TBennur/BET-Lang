@@ -7,7 +7,7 @@ pub const BUFFER_SIZE: i32 = 1024;
  */
 
 pub const ENTRYPOINT_LABEL: &str = "our_code_starts_here";
-pub const OVERFLOW_LABEL: &str = "overflow";
+pub const ERROR_LABEL: &str = "error";
 pub const MAIN_LABEL: &str = "__main";
 
 /**

@@ -143,7 +143,9 @@ fn compile_bin_op_to_instrs(
                 Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
             ));
             // Do Overflow Checking
-            instr_to_compute_res.push(Instr::JumpOverflow(String::from(OVERFLOW_LABEL)));
+
+            instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
+            instr_to_compute_res.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
         }
         _ => {
             instr_to_compute_res.push(Instr::Compare(
@@ -550,11 +552,12 @@ fn compile_expr_to_instrs(
 
             // check how many bytes we've allocated (stored in RDX)
 
-            // logic: if (RDX + alloc_size) > BUFFER_SIZE, go to OVERFLOW_LABEL
+            // logic: if (RDX + alloc_size) > BUFFER_SIZE, go to ERROR_LABEL
             instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := num bytes allocated
             instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(alloc_size))); // rax := num bytes allocated + num bytes needed
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(BUFFER_SIZE))); // if (num bytes allocated + num bytes needed) > BUFFER_SIZE:
-            instructions.push(Instr::JumpGreater(OVERFLOW_LABEL.to_string())); // jump to OVERFLOW_LABEL
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(2)));
+            instructions.push(Instr::JumpGreater(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
             
             // we have enough room; get the address of bump_array[rbx]
@@ -762,7 +765,7 @@ pub fn compile_prog(p: &Prog) -> String {
 
     // a runtime error causes us to jump here before reaching the SnekPrint call
     // since this function doesn't typecheck in the current type system, write it in ASM
-    all_instrs.push(Instr::AddLabel(OVERFLOW_LABEL.to_string()));
+    all_instrs.push(Instr::AddLabel(ERROR_LABEL.to_string()));
     all_instrs.push(Instr::Call(FunctionLabel::SnekError));
     all_instrs.push(Instr::Ret);
 

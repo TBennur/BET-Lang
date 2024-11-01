@@ -1,5 +1,5 @@
 use crate::{
-    consts::{ENTRYPOINT_LABEL, MAIN_LABEL, OVERFLOW_LABEL},
+    consts::{ENTRYPOINT_LABEL, MAIN_LABEL, ERROR_LABEL},
     structs::*,
 };
 use once_cell::sync::Lazy;
@@ -53,7 +53,7 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         /* --- Reserved Labels --- */
         ENTRYPOINT_LABEL,
         MAIN_LABEL,
-        OVERFLOW_LABEL,
+        ERROR_LABEL,
         /* --- New to eggeater --- */
         "struct", // struct *<name type>: used to declare a new struct type
         "null",   // e: ... | null: a universal pointer type, which can be a pointer to any type

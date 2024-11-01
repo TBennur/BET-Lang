@@ -10,8 +10,16 @@ extern "C" {
 }
 
 #[export_name = "\x01snek_error"]
-pub extern "C" fn snek_error() {
-    eprintln!("overflow");
+pub extern "C" fn snek_error(error_flag: i64) {
+    if error_flag == 1 {
+        eprintln!("Runtime error: overflow");
+    } else if error_flag == 2 {
+        eprintln!("Runtime error: out of space");
+    } else if error_flag == 3 {
+        eprintln!("Runtime error: null dereference");
+    } else {
+        eprintln!("Runtime error: unknown");
+    }
     std::process::exit(1);
 }
 
