@@ -4,6 +4,7 @@ use crate::consts::*;
 use crate::semantics::STRUCT_NUM_TO_NAME;
 use crate::structs::*;
 use crate::typecheck::type_check_prog;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 /**
  * Helper Function
@@ -13,7 +14,7 @@ pub fn type_to_flag(t: ExprType) -> i32 {
     match t {
         ExprType::Int => INT_TYPE_FLAG,
         ExprType::Bool => BOOL_TYPE_FLAG,
-        ExprType::StructPointer(_) => 3,
+        ExprType::StructPointer(i) => i,
     }
 }
 
@@ -67,6 +68,7 @@ fn reg_to_str(r: &Reg) -> String {
     match r {
         Reg::RAX => "rax".to_string(),
         Reg::RBX => "rbx".to_string(),
+        Reg::RDX => "rdx".to_string(),
         Reg::RSP => "rsp".to_string(),
         Reg::RSI => "rsi".to_string(),
         Reg::RDI => "rdi".to_string(),
@@ -242,7 +244,7 @@ fn compile_expr_to_instrs(
                         Val::Reg(Reg::RSP),
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
                     )); // Reset Alignment
-
+                    instructions.push(Instr::Lea(Val::Reg(Reg::RDX), Val::Global("msg".to_string())));
                     instructions.push(Instr::Call(FunctionLabel::SnekPrint));
 
                     instructions.push(Instr::ISub(
@@ -559,9 +561,11 @@ fn compile_expr_to_instrs(
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(2)));
             instructions.push(Instr::JumpGreater(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
-            
             // we have enough room; get the address of bump_array[rbx]
-            instructions.push(Instr::Lea(Val::Reg(Reg::RAX), Val::Global(BUFFER_NAME.to_string()))); // rax := &array
+            instructions.push(Instr::Lea(
+                Val::Reg(Reg::RAX),
+                Val::Global(BUFFER_NAME.to_string()),
+            )); // rax := &array
             instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := &array + rbx
 
             // update the total bytes allocated, so that the next alloc points to next free addrr
@@ -621,9 +625,9 @@ fn compile_expr_to_instrs(
                 label_name,
             );
             instructions.extend(instr_to_get_struct);
-            
+
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3))); 
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
             instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
             instructions.push(Instr::IMov(
@@ -666,7 +670,6 @@ fn compile_expr_to_instrs(
                 None => panic!("Unexpected: Broken structure dictionary. This should not happen"),
             };
 
-            
             let instr_to_get_struct = compile_expr_to_instrs(
                 typed_expr,
                 scope_bindings.clone(),
@@ -680,7 +683,7 @@ fn compile_expr_to_instrs(
 
             // if struct ptr is null, die
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3))); 
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
             instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
             // didn't die, so struct ptr isn't null, so access
@@ -702,7 +705,7 @@ fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>)
 
     if fun_name.clone() == ENTRYPOINT_LABEL {
         instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Imm(0)))
-    } 
+    }
 
     let init_rsp_offset = 0; // the body of a function expects RSP has been adjusted
     let mut label_counter = 0; // function names should be unique, so can reset counter
@@ -739,6 +742,8 @@ fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>)
 
     instrs
 }
+
+// fn compile_prog_to_instr(p:)
 
 pub fn compile_prog(p: &Prog) -> String {
     let TypedProg::Program(body_type, struct_layouts, typed_funs, typed_e) = type_check_prog(p);
@@ -788,6 +793,10 @@ pub fn compile_prog(p: &Prog) -> String {
 
     let full_program = format!(
         "
+section .data
+global msg
+msg db \"Hello from NASM!\", 0
+
 section .bss
 global {BUFFER_NAME}
 {BUFFER_NAME}: resb {BUFFER_SIZE} ; reserve {BUFFER_SIZE} bytes for array

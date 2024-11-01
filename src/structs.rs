@@ -187,6 +187,7 @@ pub enum Val {
 pub enum Reg {
     RAX,
     RBX,
+    RDX,
     RSP,
     RSI,
     RDI,

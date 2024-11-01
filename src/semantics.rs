@@ -8,7 +8,7 @@ use std::{
     sync::Mutex,
 };
 
-static STRUCT_COUNTER: Mutex<i32> = Mutex::new(0);
+static STRUCT_COUNTER: Mutex<i32> = Mutex::new(2);
 /// Maps a struct enumeration number to the name of the corresponding struct type
 ///
 /// Can contain invalid structs (struct names which weren't declared) which will be detected at type-check

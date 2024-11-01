@@ -28,7 +28,12 @@ const IS_INT: u64 = 1;
 
 #[export_name = "\x01snek_print"]
 /// Changed snek_print to reflect the semantic meaning of print, which evaluates to the printed value
-pub extern "C" fn snek_print(value: i64, type_flag: u64) -> i64 {
+pub extern "C" fn snek_print(value: i64, type_flag: u64, msg: i64) -> i64 {
+    
+    let c_str = unsafe { std::ffi::CStr::from_ptr(msg as *const i8) };
+    let str_slice = c_str.to_str().expect("Invalid UTF-8");
+    println!("{}", str_slice);
+    
     if type_flag == IS_BOOL {
         if value == 0 {
             println!("false");
