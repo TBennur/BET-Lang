@@ -1,0 +1,14 @@
+(fun addUp ((m int)) int (if (= m 1) 1 (addUp2 m (- m 1))))
+
+(fun addUp2 ((m int) (n int)) int (
+        if (= m 2)
+        3
+        (addUp3 m n (- n 1))   
+    )
+)
+
+(fun addUp3 ((m int) (n int) (o int)) int 
+    (+ m (addUp2 n o))
+)
+
+(addUp input)
