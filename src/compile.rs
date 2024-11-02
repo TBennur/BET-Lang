@@ -290,7 +290,7 @@ fn compile_expr_to_instrs(
                     exp,
                     curr_let_binding.clone(),
                     &struct_layouts,
-                    rsp_offset,
+                    curr_rsp_offset,
                     label_counter,
                     label_name,
                 );
