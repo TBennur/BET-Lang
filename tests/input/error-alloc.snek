@@ -1,1 +1,17 @@
 ; A program with a static or dynamic error related to heap-allocated values.
+; This demonstrates what happens when the program runs out of memory
+; An out of space error will happen at runtime
+
+(struct ll ((val int) (next ll)))
+
+(let 
+    (
+        (x (alloc ll)) 
+    ) 
+	(repeat-until  
+		    (block
+                (set! x (alloc ll)) 
+            )
+            false
+    )
+)

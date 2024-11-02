@@ -32,7 +32,6 @@ fn main() -> std::io::Result<()> {
 
     let asm_program = compile_prog(&prog);
 
-
     let mut out_file = File::create(out_name)?;
     out_file.write_all(asm_program.as_bytes())?;
 

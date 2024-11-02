@@ -2,3 +2,49 @@
 ; structure with those values, and a function that takes two points and returns 
 ; a new point with their x and y coordinates added together, along with several 
 ; tests that print example output from calling these functions.
+; The output should be 4, 6, 8, 16, 18, 20
+
+(struct point ((x int) (y int)))
+
+(fun addPoint ((p point) (q point)) point 
+    (let 
+        ((r (alloc point)))
+        (block 
+            (update r x (+ (lookup p x) (lookup q x)))
+            (update r y (+ (lookup p y) (lookup q y)))
+            r
+        )
+    )
+)
+
+(let 
+    (
+        (p (alloc point))
+        (q (alloc point))
+        (r (alloc point))
+    )
+    (block 
+        (update p x 1)
+        (update q x 3)
+        (update r x 5)
+        (update p y 7)
+        (update q y 9)
+        (update r y 11)
+        (
+            let 
+                (
+                    (s (addPoint p q))
+                    (t (addPoint p r))
+                    (u (addPoint q r))
+                )
+                (block 
+                    (print (lookup s x))
+                    (print (lookup t x))
+                    (print (lookup u x))
+                    (print (lookup s y)) 
+                    (print (lookup t y)) 
+                    (lookup r y)
+                )
+        )
+    )
+)

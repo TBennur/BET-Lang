@@ -2,3 +2,35 @@
 ; search trees, and implements functions to add an element and check if an 
 ; element is in the tree. Include several tests that print example output from
 ; calling these functions.
+
+(struct bst ((val int) (left bst) (right bst)))
+
+(fun newBST () bst (alloc bst))
+
+(fun setVal ((tree bst) (newVal int)) bst 
+    (block 
+        (
+            (update tree val newVal)
+            tree
+        )
+    )
+)
+
+(fun setLeft ((tree bst) (newLeft bst)) bst 
+    (block 
+        (
+            (update tree left newLeft)
+            tree
+        )
+    )
+)
+
+(fun setRight ((tree bst) (newRight right)) bst 
+    (block 
+        (
+            (update tree right newRight)
+            tree
+        )
+    )
+)
+

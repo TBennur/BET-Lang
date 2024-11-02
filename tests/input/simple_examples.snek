@@ -1,2 +1,22 @@
 ; A program with a number of simple examples of constructing and accessing 
 ; heap-allocated data in your language.
+; This demonstrates the allocation of two linked list cells
+; The cells are allocated, set and connected to eachother
+; The output should be 1, 2, 2
+
+(struct ll ((val int) (next ll)))
+
+(let 
+	(
+		(x (alloc ll)) 
+		(y (alloc ll)) 
+	) 
+	(block 
+		(update x val 1)  
+		(update y val 2)  
+		(update x next y)  
+		(print (lookup x val))
+        (print (lookup y val))
+		(lookup (lookup x next) val)
+	)
+)

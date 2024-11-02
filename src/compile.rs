@@ -1,10 +1,9 @@
 use im::HashMap;
 
 use crate::consts::*;
-use crate::semantics::STRUCT_NUM_TO_NAME;
+use crate::semantics::{struct_name_to_type_enum, STRUCT_NUM_TO_NAME};
 use crate::structs::*;
 use crate::typecheck::type_check_prog;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 /**
  * Helper Function
@@ -244,7 +243,10 @@ fn compile_expr_to_instrs(
                         Val::Reg(Reg::RSP),
                         Val::Imm(compute_aligned_rsp_offset(rsp_offset)),
                     )); // Reset Alignment
-                    instructions.push(Instr::Lea(Val::Reg(Reg::RDX), Val::Global("msg".to_string())));
+                    instructions.push(Instr::Lea(
+                        Val::Reg(Reg::RDX),
+                        Val::Global("structHashmap".to_string()),
+                    ));
                     instructions.push(Instr::Call(FunctionLabel::SnekPrint));
 
                     instructions.push(Instr::ISub(
@@ -743,7 +745,56 @@ fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>)
     instrs
 }
 
-// fn compile_prog_to_instr(p:)
+// #[derive(Serialize)]
+// struct StructNameToStructInfoMap {
+//     data: StdHashMap<String, (String, StdHashMap<String, String>)>,
+// }
+
+// fn convert_struct_layouts(
+//     struct_layouts: &HashMap<String, StructLayout>,
+// ) -> StdHashMap<String, (String, StdHashMap<String, String>)> {
+//     let mut res: StdHashMap<i32, (String, StdHashMap<i32, String>)> = StdHashMap::new();
+//     for (struct_name, StructLayout::Layout(struct_layout)) in struct_layouts {
+//         let struct_type_enum = struct_name_to_type_enum(struct_name);
+//         assert!(struct_type_enum >= 2); // to avoid collisions with bool/int
+
+//         // reverse hashmap
+//         let mut sub_res: StdHashMap<String, String> = StdHashMap::new();
+//         for (field_name, field_offset) in struct_layout {
+//             sub_res.insert((*field_offset).to_string(), field_name.to_string());
+//         }
+
+//         res.insert(
+//             struct_type_enum.to_string(),
+//             (struct_name.to_string(), sub_res),
+//         );
+//     }
+//     res
+// }
+
+// let need_to_serialize: StructNameToStructInfoMap = StructNameToStructInfoMap {
+//     data: convert_struct_layouts(&struct_layouts),
+// };
+
+// let serialized = serde_json::to_string(&need_to_serialize).unwrap();
+// let serialized = serialized.replace('"', "");
+
+fn serialize_struct_layouts(struct_layouts: &HashMap<String, StructLayout>) -> String {
+    let mut res_vec: Vec<Vec<String>> = Vec::new();
+    for (struct_name, StructLayout::Layout(struct_layout)) in struct_layouts {
+        let mut subres_vec: Vec<String> = Vec::new(); // [struct_type_enum, struct_name, offset_1, field_name_1...]
+        subres_vec.push(struct_name_to_type_enum(struct_name).to_string());
+        subres_vec.push(struct_name.to_string());
+        for (field_name, offset) in struct_layout {
+            subres_vec.push(offset.to_string());
+            subres_vec.push(field_name.to_string());
+        }
+        res_vec.push(subres_vec);
+    }
+
+    let res_vec: Vec<String> = res_vec.into_iter().map(|subres| subres.join(".")).collect();
+    res_vec.join(",")
+}
 
 pub fn compile_prog(p: &Prog) -> String {
     let TypedProg::Program(body_type, struct_layouts, typed_funs, typed_e) = type_check_prog(p);
@@ -791,11 +842,13 @@ pub fn compile_prog(p: &Prog) -> String {
         .collect::<Vec<String>>()
         .join("\n");
 
+    let serialized = serialize_struct_layouts(&struct_layouts);
+
     let full_program = format!(
         "
 section .data
-global msg
-msg db \"Hello from NASM!\", 0
+global structHashmap
+structHashmap db \"{serialized}\", 0
 
 section .bss
 global {BUFFER_NAME}
@@ -807,10 +860,9 @@ extern snek_print
 extern snek_error
 
 global our_code_starts_here
-{}
+{instrs_string}
 
-",
-        instrs_string,
+"
     );
     full_program
 }

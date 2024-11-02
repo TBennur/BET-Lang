@@ -1,2 +1,8 @@
 ; A program with a static or dynamic error related to a field that does not 
 ; exist or out-of-bounds indexing of heap-allocated values.
+; This demonstrates what happens when a program attempts to access a nonexistent field
+; An invalid error will be thrown at compile time
+
+(struct ll ((val int) (next ll)))
+
+(let ((x (alloc ll))) (lookup x value))
