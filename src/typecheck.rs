@@ -156,6 +156,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
     );
     TypedProg::Program(
         extract_type(&typed_body),
+        struct_type_map,
         struct_layouts,
         typed_functions,
         typed_body,

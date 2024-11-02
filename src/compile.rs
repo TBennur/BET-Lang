@@ -1,7 +1,7 @@
 use im::HashMap;
 
 use crate::consts::*;
-use crate::semantics::{struct_name_to_type_enum, STRUCT_NUM_TO_NAME};
+use crate::semantics::{struct_name_to_type_enum, struct_type_enum_to_name, STRUCT_NUM_TO_NAME};
 use crate::structs::*;
 use crate::typecheck::type_check_prog;
 
@@ -745,44 +745,19 @@ fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>)
     instrs
 }
 
-// #[derive(Serialize)]
-// struct StructNameToStructInfoMap {
-//     data: StdHashMap<String, (String, StdHashMap<String, String>)>,
-// }
-
-// fn convert_struct_layouts(
-//     struct_layouts: &HashMap<String, StructLayout>,
-// ) -> StdHashMap<String, (String, StdHashMap<String, String>)> {
-//     let mut res: StdHashMap<i32, (String, StdHashMap<i32, String>)> = StdHashMap::new();
-//     for (struct_name, StructLayout::Layout(struct_layout)) in struct_layouts {
-//         let struct_type_enum = struct_name_to_type_enum(struct_name);
-//         assert!(struct_type_enum >= 2); // to avoid collisions with bool/int
-
-//         // reverse hashmap
-//         let mut sub_res: StdHashMap<String, String> = StdHashMap::new();
-//         for (field_name, field_offset) in struct_layout {
-//             sub_res.insert((*field_offset).to_string(), field_name.to_string());
-//         }
-
-//         res.insert(
-//             struct_type_enum.to_string(),
-//             (struct_name.to_string(), sub_res),
-//         );
-//     }
-//     res
-// }
-
-// let need_to_serialize: StructNameToStructInfoMap = StructNameToStructInfoMap {
-//     data: convert_struct_layouts(&struct_layouts),
-// };
-
-// let serialized = serde_json::to_string(&need_to_serialize).unwrap();
-// let serialized = serialized.replace('"', "");
-
-fn serialize_struct_layouts(struct_layouts: &HashMap<String, StructLayout>) -> String {
+fn serialize_struct_layouts(
+    struct_sigs: &HashMap<String, StructSignature>, // to know the types of fields
+    struct_layouts: &HashMap<String, StructLayout>, // to know the offsets of fields
+) -> String {
     let mut res_vec: Vec<Vec<String>> = Vec::new();
     for (struct_name, StructLayout::Layout(struct_layout)) in struct_layouts {
-        let mut subres_vec: Vec<String> = Vec::new(); // [struct_type_enum, struct_name, offset_1, field_name_1...]
+        let StructSignature::Sig(struct_field_types) = match struct_sigs.get(struct_name) {
+            Some(sig) => sig,
+            None => unreachable!("Struct name is in struct layouts but not struct sigs."),
+        };
+
+        let mut subres_vec: Vec<String> = Vec::new(); // [struct struct_type_enum, struct_name, offset_1, field_name_1, type_1 ...]
+        subres_vec.push("struct".to_string()); // filler so that we can chunk into 3
         subres_vec.push(struct_name_to_type_enum(struct_name).to_string());
         subres_vec.push(struct_name.to_string());
 
@@ -791,9 +766,22 @@ fn serialize_struct_layouts(struct_layouts: &HashMap<String, StructLayout>) -> S
             .map(|(fname, offset)| (offset, fname))
             .collect();
         struct_layout.sort_by_key(|(offset, _fname)| (*offset));
-        for (offset, field_name) in struct_layout {
+        for (i, (offset, field_name)) in struct_layout.iter().enumerate() {
             subres_vec.push(offset.to_string());
             subres_vec.push(field_name.to_string());
+            subres_vec.push(match struct_field_types.get(i) {
+                Some((expr_type, _field_name)) => match expr_type {
+                    ExprType::Int => "int".to_string(),
+                    ExprType::Bool => "bool".to_string(),
+                    ExprType::StructPointer(struct_type_enum) => {
+                        match struct_type_enum_to_name(*struct_type_enum) {
+                            Some(s) => s,
+                            None => unreachable!(),
+                        }
+                    }
+                },
+                None => unreachable!(),
+            });
         }
         res_vec.push(subres_vec);
     }
@@ -803,7 +791,8 @@ fn serialize_struct_layouts(struct_layouts: &HashMap<String, StructLayout>) -> S
 }
 
 pub fn compile_prog(p: &Prog) -> String {
-    let TypedProg::Program(body_type, struct_layouts, typed_funs, typed_e) = type_check_prog(p);
+    let TypedProg::Program(body_type, struct_sigs, struct_layouts, typed_funs, typed_e) =
+        type_check_prog(p);
 
     let mut all_instrs = Vec::new();
 
@@ -848,7 +837,7 @@ pub fn compile_prog(p: &Prog) -> String {
         .collect::<Vec<String>>()
         .join("\n");
 
-    let serialized = serialize_struct_layouts(&struct_layouts);
+    let serialized = serialize_struct_layouts(&struct_sigs, &struct_layouts);
 
     let full_program = format!(
         "

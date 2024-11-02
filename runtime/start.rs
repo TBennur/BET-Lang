@@ -11,24 +11,31 @@ extern "C" {
 
 const SIZEOF_I_64: i64 = 8;
 
+/// If the passed `target_type_enum` exists in the `serialized` string, returns Some(
+///    - the name of the struct
+///    - a vector contianing, for each field in the struct (in order of offset):
+///         - offset, field name, field type name
+/// )
 fn deserialize_structs(
     serialized: String,
     target_type_enum: i32,
-) -> Option<(String, Vec<(i32, String)>)> {
+) -> Option<(String, Vec<(i32, String, String)>)> {
     let subres_strs_vec: Vec<&str> = serialized.split(",").collect();
     for subres_str in subres_strs_vec {
         let struct_vec: Vec<&str> = subres_str.split(".").collect();
-        if struct_vec.len() < 4 {
-            // struct name + struct enum + >= 1 field name + >= 1 field offset
+        if struct_vec.len() < 6 {
+            // struct + struct_name + struct_enum + >= 1 field name + >= 1 field offset + >= 1 type
             panic!("Invalid: illegal struct type serialization")
         }
-        let chunked: Vec<&[&str]> = struct_vec.chunks(2).collect();
+        let chunked: Vec<&[&str]> = struct_vec.chunks(3).collect();
         let (first, rest) = match chunked.split_first() {
             Some(a) => a,
             None => panic!("Unexpected: broke"),
         };
-        let (struct_type_enum, struct_name) = match first[..] {
-            [struct_type_enum, struct_name] => (struct_type_enum, struct_name),
+        let (_struct_keyword, struct_type_enum, struct_name) = match first[..] {
+            [_struct_keyword, struct_type_enum, struct_name] => {
+                (_struct_keyword, struct_type_enum, struct_name)
+            }
             _ => panic!("Unexpected: broke"),
         };
         let struct_type_enum: i32 = match (struct_type_enum).parse::<i32>() {
@@ -40,14 +47,18 @@ fn deserialize_structs(
             continue;
         }
 
-        let mut struct_offset_field_to_name: Vec<(i32, String)> = Vec::new();
+        let mut struct_offset_field_to_name: Vec<(i32, String, String)> = Vec::new();
         for chunk in rest {
-            if let [offset, field_name] = chunk {
+            if let [offset, field_name, field_type_name] = chunk {
                 let offset: i32 = match (*offset).parse::<i32>() {
                     Err(_) => panic!("Invalid Input"),
                     Ok(val) => val,
                 };
-                struct_offset_field_to_name.push((offset, field_name.to_string()));
+                struct_offset_field_to_name.push((
+                    offset,
+                    field_name.to_string(),
+                    field_type_name.to_string(),
+                ));
             } else {
                 panic!("Unexpected: broke")
             }
@@ -97,10 +108,13 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64, msg: i64) -> i64 {
                     println!("null pointer to struct {}", struct_name)
                 } else {
                     println!("struct {struct_name} ({value})");
-                    for (offset, field_name) in field_map {
+                    for (offset, field_name, field_type) in field_map {
+                        // access the address of the field, interpreted as a 64 bit int, if it exists
                         match i64_to_addr(value + (SIZEOF_I_64 * (offset as i64))) {
                             None => snek_error(-1),
-                            Some(&field_val) => println!("\t{}: {}", field_name, field_val),
+                            Some(&field_val) => {
+                                println!("\t{}: {} = {}", field_name, field_type, field_val)
+                            }
                         }
                     }
                 }

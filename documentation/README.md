@@ -72,19 +72,19 @@
 2
 ```
 
-### `inputs/points.snek`
+### `input/points.snek`
 
 ```
 % ./tests/input/points.run
-struct point (0x4309787136)
-        x: 4
-        y: 16
-struct point (0x4309787152)
-        x: 6
-        y: 18
-struct point (0x4309787168)
-        x: 8
-        y: 20
+struct point (4297069072)
+        x: int = 4
+        y: int = 16
+struct point (4297069088)
+        x: int = 6
+        y: int = 18
+struct point (4297069104)
+        x: int = 8
+        y: int = 20
 null pointer to struct point
 ```
 
@@ -94,11 +94,55 @@ One limitation of our program is that we didn't have time to implement is saving
 
 When you call print on a struct pointer with value 0x0, ie, null, it displays that the struct you printed is null, as well as the type of the pointer.
 
-### `inputs/bst.snek`
+### `input/bst.snek`
 
-TODO
+```
+% ./tests/input/bst.run
+struct bst (4308189680) ; root
+        val: int = 4
+        left: bst = 0
+        right: bst = 0
+null pointer to struct bst ; root's left child
+null pointer to struct bst ; root's right child
+struct bst (4308189680) ; root
+        val: int = 4
+        left: bst = 4308189704
+        right: bst = 0
+struct bst (4308189704) ; root's left child
+        val: int = 3
+        left: bst = 0
+        right: bst = 0
+null pointer to struct bst ; root's right child
+struct bst (4308189680) ; root
+        val: int = 4
+        left: bst = 4308189704
+        right: bst = 0
+struct bst (4308189704) ; root's left child
+        val: int = 3
+        left: bst = 4308189728
+        right: bst = 0
+null pointer to struct bst ; root's right child
+struct bst (4308189680) ; root
+        val: int = 4
+        left: bst = 4308189704
+        right: bst = 4308189752
+struct bst (4308189704) ; root's left child
+        val: int = 3
+        left: bst = 4308189728
+        right: bst = 0
+struct bst (4308189752) ; root's right child
+        val: int = 5
+        left: bst = 0
+        right: bst = 0
+```
 
-### `inputs/error-alloc.snek`
+In this example, we start by allocating a tree with value `4` and no children. 
+
+Then for each of: `3, 2, 5` (in that order), we insert the new number into the BST and then print the root (which contains 4).
+
+As the trace shows, initally the root has `null` for left and right. Once we insert `3`, since that's smaller than 4 it is inserted as the left child of the root, which is now non null. When we insert `2`, since it's smaller than 4 it belongs to the left subtree, and is inserted as the left child of `3`. When we insert `5`, which is larger than 4, it goes into the right subtree, which is why in the final printout the root's right child is non-null.
+
+### `input/error-alloc.snek`
 
 ```
 % ./tests/input/error-alloc.run
@@ -109,7 +153,7 @@ This program calls `alloc` in a `repeat-until-false` loop (which would run forev
 
 This error happens at runtime, as `lookup` / `update` check for null-pointer dereference.
 
-### `inputs/error-read.snek`
+### `input/error-read.snek`
 
 ```
 % make tests/input/error-read.run
@@ -139,3 +183,14 @@ In this test, a null pointer is dereferenced at runtime, which generates a runti
 ## Comparison to Real Programing Languages
 
 ## List of Resources
+
+**Designing a Bump Allocator:**
+https://cohost.org/eniko/post/171803-basic-memory-allocat 
+
+**Storing and Accessing a .bss Array:**
+https://stackoverflow.com/questions/34058101/referencing-the-contents-of-a-memory-location-x86-addressing-modes 
+https://www.reddit.com/r/asm/comments/16tdhvh/data_vs_bss_for_uninitialized_data/ 
+
+**Pretty Printing and String Methods:**
+https://stackoverflow.com/questions/70096134/assembly-store-a-string-in-register
+https://docs.rs/windows-win/latest/windows_win/sys/struct.CStr.html

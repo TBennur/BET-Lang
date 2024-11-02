@@ -95,7 +95,7 @@ fn parse_expr(s: &Sexp) -> Expr {
             // has the form let ((binding1), (binding2)) (in expression)
             [Sexp::Atom(S(op)), Sexp::List(bindings), finally] if op == "let" => {
                 if bindings.len() == 0 {
-                    panic!("Invalid: Empty block")
+                    panic!("Invalid: Empty let block")
                 } else {
                     Expr::Let(
                         bindings

@@ -160,6 +160,7 @@ pub enum TypedProg {
     // structs aren't compiled-- they're reduced to sizes (alloc) and offsets (lookup, update)
     Program(
         ExprType,
+        HashMap<String, StructSignature>,
         HashMap<String, StructLayout>,
         Vec<TypedFunction>,
         TypedExpr,

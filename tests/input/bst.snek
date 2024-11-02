@@ -16,7 +16,6 @@
 
 (fun setLeft ((tree bst) (newLeft bst)) bst 
     (block 
-        
             (update tree left newLeft)
             tree
         
@@ -25,7 +24,6 @@
 
 (fun setRight ((tree bst) (newRight bst)) bst 
     (block 
-        
             (update tree right newRight)
             tree
         
@@ -46,7 +44,7 @@
                     (= cur searchVal) 
                     tree
                     (if 
-                        (> cur searchVal)
+                        (< cur searchVal)
                         (search (lookup tree right) searchVal)
                         (search (lookup tree left) searchVal)
                     )
@@ -74,7 +72,7 @@
                 (= cur newVal) 
                 tree 
                 (if 
-                    (> cur newVal)
+                    (< cur newVal)
                     (if 
                         (= (lookup tree right) (null bst))
                         (block 
