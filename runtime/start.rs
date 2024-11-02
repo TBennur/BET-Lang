@@ -9,7 +9,12 @@ extern "C" {
     fn our_code_starts_here(input: u64) -> u64;
 }
 
-fn deserialize_structs(serialized: String, target_type_enum: i32) -> Option<(String, Vec<(i32, String)>)> {
+const SIZEOF_I_64: i64 = 8;
+
+fn deserialize_structs(
+    serialized: String,
+    target_type_enum: i32,
+) -> Option<(String, Vec<(i32, String)>)> {
     let subres_strs_vec: Vec<&str> = serialized.split(",").collect();
     for subres_str in subres_strs_vec {
         let struct_vec: Vec<&str> = subres_str.split(".").collect();
@@ -83,14 +88,34 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64, msg: i64) -> i64 {
     } else if type_flag == IS_INT {
         println!("{}", value);
     } else {
+        // pointer to a struct
         match deserialize_structs(str_slice.to_string(), type_flag as i32) {
-            None => snek_error(-1),
-            Some(map) => println!("{:?}", map),
+            None => snek_error(-1), // invalid struct type
+            Some((struct_name, field_map)) => {
+                if value == 0 {
+                    // null pointer
+                    println!("null pointer to struct {}", struct_name)
+                } else {
+                    println!("struct {struct_name}");
+                    for (offset, field_name) in field_map {
+                        match i64_to_addr(value + (SIZEOF_I_64 * (offset as i64))) {
+                            None => snek_error(-1),
+                            Some(&field_val) => println!("\t{}: {}", field_name, field_val),
+                        }
+                    }
+                }
+            }
         };
-
-        println!("unknown flag {}, {}", value, type_flag);
     }
     value
+}
+
+/// Convert an i64 to a pointer to an i64
+///
+/// Returns None if it's NULL
+fn i64_to_addr(addr: i64) -> Option<&'static i64> {
+    let ptr = addr as *const i64;
+    unsafe { ptr.as_ref() }
 }
 
 fn parse_input(input: &str) -> u64 {

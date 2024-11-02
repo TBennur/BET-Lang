@@ -38,12 +38,16 @@
                     (u (addPoint q r)) ; 8, 20
                 )
                 (block 
-                    (print (lookup s x)) ; 4
-                    (print (lookup s y)) ; 16
-                    (print (lookup t x)) ; 6
-                    (print (lookup t y)) ; 18
-                    (print (lookup u x)) ; 8
-                    (lookup u y) ; 20
+                    ; (print (lookup s x)) ; 4
+                    ; (print (lookup s y)) ; 16
+                    ; (print (lookup t x)) ; 6
+                    ; (print (lookup t y)) ; 18
+                    ; (print (lookup u x)) ; 8
+                    ; (print (lookup u y)) ; 20
+                    (print s)
+                    (print t)
+                    (print u)
+                    (null point) ; 20
                 )
         )
     )
