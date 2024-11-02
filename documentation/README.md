@@ -40,6 +40,7 @@
     - Field names must be unique within a struct.
     - Field types can include any type, including `int`, `bool`, mutually-recursive structs, or any other struct.
     - Structs can be declared in any order; all struct names are parsed, then type-checking occurs.
+    - Structs cannot share a name with a function
 - Instances of structs, accessible via pointer, are created with `alloc`. Fields of new structs are initialized to 0 for integers, `null` for structs, and `false` for bools.
 - Fields of structs can be updated and evaluated with `lookup` and `update`, both of which evaluate to the value in the struct field (the new value for `update`).
 - `(null <name>)` creates a pointer of type `<name>` which has value `null`.
@@ -49,9 +50,9 @@
 
     ```
     struct <name>
-            <field_1_name> : <runtime_value>
+            <field_1_name> : <field_1_type> = <runtime_value>
             ...
-            <field_n_name> : <runtime_value>
+            <field_n_name> : <field_n_type> = <runtime_value>
     ```
 
     - Null pointer:
@@ -60,6 +61,16 @@
     ```
 
 ## Diagram of Heap-Allocation
+
+![RenderedImage](RenderedImage.jpeg)
+
+- We start with an empty array in the .bss section. %rbx is initialized as 0, indicating the beginning of the heap. The buffer has size 8 * 8 = 64. There are 2 possible structures: l2, which contains val1 and val2, and l4, which contains val1, val2, val3 and val4.
+- Next, we allocate x, an l2 structure. There is still space in the .bss array (as %rbx + 8 * 2 $\leq$ `BUFFER_SIZE`), so the allocation works. All of x's fields are initialized as 0, while x is set to the address of the start of the .bss array. We then increment %rbx
+- We then allocate y, an l4 structure. There is still space in the .bss array (as %rbx + 8 * 4 $\leq$ `BUFFER_SIZE`), so the allocation works. All of y's fields are initialized as 0, while y is set to the address of third entry of the .bss array. We then increment %rbx.
+- Next, we update y's val3 field to 3. val3 is the 3rd field of y, so we update its effective address (y + 8 * 3) to 3.
+- We then update x's val2 field to 1. val2 is the 2nd field of x, so we update its effective address (x + 8 * 2) to 1.
+- Next, we lookup x's val2 field. It's effective address is (x + 8 * 2), and we load the value stored there into %rax.
+- Finally, we try to allocate z, an l4 structure. There is no longer space in the .bss array (as %rbx + 8 * 2 > `BUFFER_SIZE`), so the allocation fails. We then throw the out of memory runtime error and the program terminates.
 
 ## Required Tests
 
@@ -167,7 +178,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 make: *** [tests/input/error-read.s] Error 101
 ```
 
-This test demonstrates what happens when a program attempts to access a nonexistent field; it throws a **compile time** error, which identified the struct name, and the field name which isn't in that struct. This error happens at compile time, during typechecking (after parsing, before compiling).
+This test demonstrates what happens when a program attempts to access a nonexistent field; it throws a **compile time** error, which identified the struct name, and the field name which isn't in that struct. This error happens at compile time, during type-checking (after parsing, before compiling).
 
 From the declaration of `ll`, it has no field `value` (the correct field is `val`): `(struct ll ((val int) (next ll)))`.
 
@@ -182,12 +193,20 @@ In this test, a null pointer is dereferenced at runtime, which generates a runti
 
 ## Comparison to Real Programing Languages
 
+Two languages which supports heap-allocated data are C, and SML. In C, memory management isn't a feature of the language, but is implemented user-side functions, typically `malloc()` and `free()`. The user of the program is responsible for checking if `malloc()` failed, and for only calling `free()` on memory it "owns" (ie, got from a call to `malloc()`). C also allows for pointer arithmetic and reading / writing to arbitrary memory.
+
+Our language, in contrast to C, provided memory management as a *language* feature, and the user can't do pointer arithmetic. So, the only pointer which the user has access to which isn't a pointer to a valid struct is `null`, and we perform runtime checks that we don't dereference `null` for every pointer dereference, which provides us with memory safety.
+
+SML is much closer to our model than C, since SML doesn't expose pointers to the user, and doesn't require explicit allocation & deallocation as C does. In SML, users can create ref cells which are mutable references to a specific. These are very similar to our structs, which are created via `alloc` and are pointers to memory under the hood. Our structs are also typed, so that at compile-time we know how a pointer should be treated.
+
+Our language is different from SML in that we have an allocate-only bump allocator, ie we never free a struct, where as various SML implementations use approaches like garbage collection to automatically de-allocate ref-cells once they are no longer used by the program.
+
 ## List of Resources
 
 **Designing a Bump Allocator:**
 https://cohost.org/eniko/post/171803-basic-memory-allocat 
 
-**Storing and Accessing a .bss Array:**
+**Storing and Accessing a `.bss` Array:**
 https://stackoverflow.com/questions/34058101/referencing-the-contents-of-a-memory-location-x86-addressing-modes 
 https://www.reddit.com/r/asm/comments/16tdhvh/data_vs_bss_for_uninitialized_data/ 
 
