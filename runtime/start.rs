@@ -1,5 +1,4 @@
 use std::env;
-use std::collections::HashMap;
 
 #[link(name = "our_code")]
 extern "C" {
@@ -10,61 +9,7 @@ extern "C" {
     fn our_code_starts_here(input: u64) -> u64;
 }
 
-// #[derive(Deserialize)]
-// struct StructNameToStructInfoMap {
-//     data: StdHashMap<String, (String, StdHashMap<String, String>)>,
-// }
-// use std::collections::HashMap as StdHashMap;
-
-
-
-// fn deserialize_structs(serialized: String) -> HashMap<i32, (String, HashMap<i32, String>)> {
-//     let mut res_map = std::collections::HashMap::new();
-//     let subres_strs_vec: Vec<&str> = serialized.split(",").collect();
-//     for subres_str in subres_strs_vec {
-//         let struct_vec: Vec<&str> = subres_str.split(".").collect();
-//         if struct_vec.len() < 4 {
-//             // struct name + struct enum + >= 1 field name + >= 1 field offset
-//             panic!("Invalid: illegal struct type serialization")
-//         }
-//         let chunked: Vec<&[&str]> = struct_vec.chunks(2).collect();
-//         let (first, rest) = match chunked.split_first() {
-//             Some(a) => a,
-//             None => panic!("Unexpected: broke"),
-//         };
-//         let (struct_type_enum, struct_name) = match first[..] {
-//             [struct_type_enum, struct_name] => (struct_type_enum, struct_name),
-//             _ => panic!("Unexpected: broke"),
-//         };
-//         let struct_type_enum: i32 = match (struct_type_enum).parse::<i32>() {
-//             Err(_) => panic!("Invalid Input"),
-//             Ok(val) => val,
-//         };
-
-//         let mut struct_offset_field_to_name: HashMap<i32, String> = std::collections::HashMap::new();
-//         for chunk in rest {
-//             if let [offset, field_name] = chunk {
-//                 let offset: i32 = match (*offset).parse::<i32>() {
-//                     Err(_) => panic!("Invalid Input"),
-//                     Ok(val) => val,
-//                 };
-//                 struct_offset_field_to_name.insert(offset, field_name.to_string());
-//             } else {
-//                 panic!("Unexpected: broke")
-//             }
-//         }
-
-//         // map the struct_type_enum to (struct_name, map)
-//         res_map.insert(
-//             struct_type_enum,
-//             (struct_name.to_string(), struct_offset_field_to_name),
-//         );
-//     }
-//     res_map
-// }
-
-
-fn deserialize_structs(serialized: String, target_type_enum: i32) -> Option<(String, HashMap<i32, String>)> {
+fn deserialize_structs(serialized: String, target_type_enum: i32) -> Option<(String, Vec<(i32, String)>)> {
     let subres_strs_vec: Vec<&str> = serialized.split(",").collect();
     for subres_str in subres_strs_vec {
         let struct_vec: Vec<&str> = subres_str.split(".").collect();
@@ -90,14 +35,14 @@ fn deserialize_structs(serialized: String, target_type_enum: i32) -> Option<(Str
             continue;
         }
 
-        let mut struct_offset_field_to_name: HashMap<i32, String> = std::collections::HashMap::new();
+        let mut struct_offset_field_to_name: Vec<(i32, String)> = Vec::new();
         for chunk in rest {
             if let [offset, field_name] = chunk {
                 let offset: i32 = match (*offset).parse::<i32>() {
                     Err(_) => panic!("Invalid Input"),
                     Ok(val) => val,
                 };
-                struct_offset_field_to_name.insert(offset, field_name.to_string());
+                struct_offset_field_to_name.push((offset, field_name.to_string()));
             } else {
                 panic!("Unexpected: broke")
             }

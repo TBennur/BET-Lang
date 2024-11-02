@@ -785,7 +785,13 @@ fn serialize_struct_layouts(struct_layouts: &HashMap<String, StructLayout>) -> S
         let mut subres_vec: Vec<String> = Vec::new(); // [struct_type_enum, struct_name, offset_1, field_name_1...]
         subres_vec.push(struct_name_to_type_enum(struct_name).to_string());
         subres_vec.push(struct_name.to_string());
-        for (field_name, offset) in struct_layout {
+
+        let mut struct_layout: Vec<(&i32, &String)> = struct_layout
+            .iter()
+            .map(|(fname, offset)| (offset, fname))
+            .collect();
+        struct_layout.sort_by_key(|(offset, _fname)| (*offset));
+        for (offset, field_name) in struct_layout {
             subres_vec.push(offset.to_string());
             subres_vec.push(field_name.to_string());
         }
