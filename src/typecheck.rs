@@ -80,7 +80,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
         let struct_sig = StructSignature::Sig(checked_struct_fields);
         let struct_layout = StructLayout::Layout(struct_fields_names);
-        
+
         // push this sig into the struct type map
         struct_type_map.insert(struct_name.to_string(), struct_sig);
         struct_layouts.insert(struct_name.to_string(), struct_layout);
@@ -154,7 +154,12 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
         struct_type_map.clone(),
         true,
     );
-    TypedProg::Program(extract_type(&typed_body), struct_layouts, typed_functions, typed_body)
+    TypedProg::Program(
+        extract_type(&typed_body),
+        struct_layouts,
+        typed_functions,
+        typed_body,
+    )
 }
 
 fn type_check_expr(
@@ -401,8 +406,8 @@ fn type_check_expr(
             let type_if_false = extract_type(&typed_if_false);
             if type_if_false != type_if_true {
                 panic!(
-                    "Type mismatch: If clauses have different types: (true){:?}, (false){:?}",
-                    type_if_true, type_if_false
+                    "Type mismatch: If clauses have different types: (true){:?} {:?}, (false){:?} {:?}",
+                    type_if_true, val_if_true, type_if_false, val_if_false
                 )
             }
 
@@ -630,7 +635,7 @@ fn type_check_expr(
 
             let expected_type = match struct_sig_type_of(struct_sig, field_name) {
                 Some(expr_type) => expr_type,
-                None => panic!("Invalid: Lookup nonexistent field"),
+                None => panic!("Invalid: Lookup nonexistent field {field_name} in struct {pointed_struct_name}"),
             };
 
             TypedExpr::Lookup(

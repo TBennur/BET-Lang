@@ -96,7 +96,7 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64, msg: i64) -> i64 {
                     // null pointer
                     println!("null pointer to struct {}", struct_name)
                 } else {
-                    println!("struct {struct_name}");
+                    println!("struct {struct_name} ({value})");
                     for (offset, field_name) in field_map {
                         match i64_to_addr(value + (SIZEOF_I_64 * (offset as i64))) {
                             None => snek_error(-1),
