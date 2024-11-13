@@ -1,0 +1,14 @@
+struct ll (val::int, next::ll);
+
+let (
+  x:=(new ll),
+  y:=(1)
+) { 
+  do { 
+    x := (new ll);
+    y := (add1 (y));
+    print (y) 
+  } until ( 
+    false 
+  ) 
+}

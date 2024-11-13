@@ -1,0 +1,89 @@
+fun function0 ()::int {
+  function1
+};
+
+fun function1 ()::int {
+  function2
+};
+
+fun function2 ()::int {
+  function3
+};
+
+fun function3 ()::int {
+  function4
+};
+
+fun function4 ()::int {
+  function5
+};
+
+fun function5 ()::int {
+  function6
+};
+
+fun function6 ()::int {
+  function7
+};
+
+fun function7 ()::int {
+  function8
+};
+
+fun function8 ()::int {
+  function9
+};
+
+fun function9 ()::int {
+  function10
+};
+
+fun function10 ()::int {
+  function11
+};
+
+fun function11 ()::int {
+  function12
+};
+
+fun function12 ()::int {
+  function13
+};
+
+fun function13 ()::int {
+  function14
+};
+
+fun function14 ()::int {
+  function15
+};
+
+fun function15 ()::int {
+  function16
+};
+
+fun function16 ()::int {
+  function17
+};
+
+fun function17 ()::int {
+  function18
+};
+
+fun function18 ()::int {
+  function19
+};
+
+fun function19 ()::int {
+  function20
+};
+
+fun function20 ()::int {
+  function21
+};
+
+fun function21 ()::int {
+  print (100)
+};
+
+function0

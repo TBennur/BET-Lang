@@ -1,0 +1,11 @@
+struct ll (val::int, next::ll);
+
+let (
+  x:=(new ll)
+) { 
+  if ((null ll) == (null ll)) { 
+    true 
+  } else { 
+    false 
+  } 
+}

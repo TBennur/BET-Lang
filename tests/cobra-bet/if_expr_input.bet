@@ -1,0 +1,5 @@
+if ((input) == (665)) { 
+  (true) + (false) 
+} else { 
+  20 
+}
