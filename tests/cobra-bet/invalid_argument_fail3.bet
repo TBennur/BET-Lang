@@ -1,11 +1,11 @@
 let (
-  x:=(1),
-  y:=(2)
+  x:=1,
+  y:=2
 ) { 
   let (
-    x:=(add1 (y)),
-    y:=(true)
+    x:=(add1 y),
+    y:=true
   ) { 
-    (x) + (y) 
+    x + y 
   } 
 }

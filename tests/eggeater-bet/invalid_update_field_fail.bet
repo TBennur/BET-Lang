@@ -3,5 +3,5 @@ struct integer (val::int);
 let (
   x:=(new integer)
 ) { 
-  x.value := (true) 
+  x.value := true 
 }

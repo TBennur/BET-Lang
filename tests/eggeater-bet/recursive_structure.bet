@@ -4,9 +4,9 @@ let (
   x:=(new ll),
   y:=(new ll)
 ) { 
-  x.val := (1);
-  x.next := (y);
-  y.val := (2);
-  print (x.val);
+  x.val := 1;
+  x.next := y;
+  y.val := 2;
+  print x.val;
   x.next.val 
 }

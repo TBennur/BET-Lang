@@ -8,6 +8,7 @@ import os
 OPEN_BRACE = "{"
 CLOSE_BRACE = "}"
 NEWLINE = "\n"
+SPACE = " "
 MATH_OPERATORS = "<>=+-*"
 UNOPS = ["add1", "sub1", "print"]
 BINOPS = ["+", "-", "*", "<", ">", ">=", "<="]
@@ -69,7 +70,7 @@ def unwrapNlet(s, N, keyword = None):
 
     return parts
 
-# Checks if s starts with given keyword
+# Checks if expression starts with given keyword
 # Abstracted to remove duplication with formatting
 def checkKeyword(expression, keyword):
     k = len(keyword)
@@ -79,11 +80,19 @@ def checkKeyword(expression, keyword):
         return True
     return False
 
+# Checks if expression starts with any keyword in a list
+# Abstracted to remove duplication with formatting
 def checkKeywordList(expression, keyword_list):
     for keyword in keyword_list:
         if checkKeyword(expression, keyword):
             return True
     return False
+
+# Check if value should be wrapped in an attempt to reduce overwrapping
+def conditionalWrap(value):
+    if SPACE in value:
+        return f"({value})"
+    return value
 
 # Format assignations in let, struct and fun definitions
 # Can set custom spacers and assigners
@@ -95,7 +104,7 @@ def formatAssignations(s, spacer, delimiter, eval = False):
     for assignation in assignations:
         [var, expr] = unwrapNlet(assignation[1:-1], 2)
         if eval:
-            expr = f"({convertExpression(expr)})"
+            expr = conditionalWrap(convertExpression(expr))
         formatted_assignations.append(f"{var}{spacer}{expr}")
     assignations_string = delimiter.join(formatted_assignations)
     return assignations_string
@@ -136,20 +145,20 @@ def convertExpression(expression):
         return f"null {ty}"
     elif checkKeywordList(expression, UNOPS):
         [op1, expr] = unwrapNlet(expression, 2)
-        value = convertExpression(expr)
-        return f"{op1} ({value})"
+        value = conditionalWrap(convertExpression(expr))
+        return f"{op1} {value}"
     elif checkKeyword(expression, "set!"):
         [_, var, expr] = unwrapNlet(expression, 3, "set!")
-        value = convertExpression(expr)
-        return f"{var} := ({value})" 
+        value = conditionalWrap(convertExpression(expr))
+        return f"{var} := {value}" 
     elif checkKeyword(expression, "update"):
         [_, obj, field, expr] = unwrapNlet(expression, 4, "update")
-        var = convertExpression(obj)
-        value = convertExpression(expr)
-        return f"{var}.{field} := ({value})"        
+        var = conditionalWrap(convertExpression(obj))
+        value = conditionalWrap(convertExpression(expr))
+        return f"{var}.{field} := {value}"        
     elif checkKeyword(expression, "lookup"):
         [_, obj, field] = unwrapNlet(expression, 3, "lookup")
-        var = convertExpression(obj)
+        var = conditionalWrap(convertExpression(obj))
         return f"{var}.{field}"
     elif checkKeyword(expression, "let"):
         [_, binds, expr] = unwrapNlet(expression, 3, "let")
@@ -170,17 +179,17 @@ def convertExpression(expression):
         [_, body, cond] = unwrapNlet(expression, 3)
         body_expr = convertExpression(body)    
         cond_expr = convertExpression(cond)
-        return f"do {OPEN_BRACE} {NEWLINE}{body_expr} {NEWLINE}{CLOSE_BRACE} until ( {NEWLINE}{cond_expr} {NEWLINE})"
+        return f"do {OPEN_BRACE} {NEWLINE}{body_expr} {NEWLINE}{CLOSE_BRACE} until ({NEWLINE}{cond_expr} {NEWLINE})"
     elif checkKeyword(expression, "="): # Handled seperately as the = becomes ==
         [_, expr1, expr2] = unwrapNlet(expression, 3)
-        value1 = convertExpression(expr1)    
-        value2 = convertExpression(expr2)
-        return f"({value1}) == ({value2})"
+        value1 = conditionalWrap(convertExpression(expr1))   
+        value2 = conditionalWrap(convertExpression(expr2))
+        return f"{value1} == {value2}"
     elif checkKeywordList(expression, BINOPS):
         [op2, expr1, expr2] = unwrapNlet(expression, 3)
-        value1 = convertExpression(expr1)    
-        value2 = convertExpression(expr2)
-        return f"({value1}) {op2} ({value2})"
+        value1 = conditionalWrap(convertExpression(expr1))    
+        value2 = conditionalWrap(convertExpression(expr2))
+        return f"{value1} {op2} {value2}"
 
     # Check for call
     parts = unwrapNlet(expression, None)

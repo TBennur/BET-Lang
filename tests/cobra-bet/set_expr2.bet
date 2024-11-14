@@ -1,5 +1,5 @@
 let (
-  a:=(false)
+  a:=false
 ) { 
-  a := (true) 
+  a := true 
 }

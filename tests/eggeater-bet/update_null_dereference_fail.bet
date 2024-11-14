@@ -3,5 +3,5 @@ struct ll (val::int, next::ll);
 let (
   x:=(new ll)
 ) { 
-  x.next.val := (1) 
+  x.next.val := 1 
 }

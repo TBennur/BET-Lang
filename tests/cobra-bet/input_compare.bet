@@ -1,4 +1,4 @@
-if ((input) > (5)) { 
+if (input > 5) { 
   true 
 } else { 
   false 

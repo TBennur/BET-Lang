@@ -1,11 +1,11 @@
 let (
-  x:=(10)
+  x:=10
 ) { 
   let (
-    y:=(add1 (x))
+    y:=(add1 x)
   ) { 
     let (
-      z:=(add1 (y))
+      z:=(add1 y)
     ) { 
       z 
     } 

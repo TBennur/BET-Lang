@@ -1,24 +1,35 @@
-struct bst(val::int,left::bst,right::bst);
+struct bst (val::int, left::bst, right::bst);
 
-fun newBST()::bst{new bst};
+fun newBST ()::bst {
+  new bst
+};
 
-fun setVal(tree::bst,newVal::int)::bst{tree.val := (newVal);tree};
+fun setVal (tree::bst, newVal::int)::bst {
+  tree.val := newVal;
+  tree
+};
 
-fun setLeft(tree::bst,newLeft::bst)::bst{tree.left:=(newLeft);tree};
+fun setLeft (tree::bst, newLeft::bst)::bst {
+  tree.left := newLeft;
+  tree
+};
 
-fun setRight(tree::bst,newRight::bst)::bst{tree.right:=(newRight);tree};
+fun setRight (tree::bst, newRight::bst)::bst {
+  tree.right := newRight;
+  tree
+};
 
 fun search (tree::bst, searchVal::int)::bst {
-  if ((tree) == (null bst)) { 
+  if (tree == (null bst)) { 
     null bst 
   } else { 
     let (
-      cur:=(tree.val)
+      cur:=tree.val
     ) { 
-      if ((cur) == (searchVal)) { 
+      if (cur == searchVal) { 
         tree 
       } else { 
-        if ((cur) < (searchVal)) { 
+        if (cur < searchVal) { 
           search(tree.right, searchVal) 
         } else { 
           search(tree.left, searchVal) 
@@ -29,33 +40,33 @@ fun search (tree::bst, searchVal::int)::bst {
 };
 
 fun addTree (tree::bst, newVal::int)::bst {
-  if ((tree) == (null bst)) { 
+  if (tree == (null bst)) { 
     let (
-      newTree:=(newBST)
+      newTree:=newBST
     ) { 
-      newTree.val := (newVal);
+      newTree.val := newVal;
       newTree 
     } 
   } else { 
     let (
-      cur:=(tree.val)
+      cur:=tree.val
     ) { 
-      if ((cur) == (newVal)) { 
+      if (cur == newVal) { 
         tree 
       } else { 
-        if ((cur) < (newVal)) { 
-          if ((tree.right) == (null bst)) { 
-            tree.right := (newBST);
-            tree.right.val := (newVal);
+        if (cur < newVal) { 
+          if (tree.right == (null bst)) { 
+            tree.right := newBST;
+            tree.right.val := newVal;
             tree 
           } else { 
             tree.right := (addTree(tree.right, newVal));
             tree 
           } 
         } else { 
-          if ((tree.left) == (null bst)) { 
-            tree.left := (newBST);
-            tree.left.val := (newVal);
+          if (tree.left == (null bst)) { 
+            tree.left := newBST;
+            tree.left.val := newVal;
             tree 
           } else { 
             tree.left := (addTree(tree.left, newVal));
@@ -71,19 +82,19 @@ let (
   x:=(null bst)
 ) { 
   x := (addTree(x, 4));
-  print (x);
-  print (x.left);
-  print (x.right);
+  print x;
+  print x.left;
+  print x.right;
   x := (addTree(x, 3));
-  print (x);
-  print (x.left);
-  print (x.right);
+  print x;
+  print x.left;
+  print x.right;
   x := (addTree(x, 2));
-  print (x);
-  print (x.left);
-  print (x.right);
+  print x;
+  print x.left;
+  print x.right;
   x := (addTree(x, 5));
-  print (x);
-  print (x.left);
+  print x;
+  print x.left;
   x.right 
 }

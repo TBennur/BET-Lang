@@ -1,8 +1,8 @@
 struct ll (val::int, next::ll);
 
 let (
-  x:=(null),
+  x:=null,
   y:=(new ll)
 ) { 
-  x := (y) 
+  x := y 
 }

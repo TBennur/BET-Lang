@@ -1,7 +1,7 @@
-if ((3) > (4)) { 
+if (3 > 4) { 
   0 
 } else { 
-  if ((sub1 (2)) < (2)) { 
+  if ((sub1 2) < 2) { 
     if (true) { 
       5 
     } else { 

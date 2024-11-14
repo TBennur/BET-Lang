@@ -4,5 +4,5 @@ let (
   x:=(null integer)
 ) { 
   x := (new integer);
-  x.val := (10) 
+  x.val := 10 
 }

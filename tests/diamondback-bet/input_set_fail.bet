@@ -1,1 +1,1 @@
-input := (add1 (input))
+input := (add1 input)

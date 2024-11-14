@@ -3,5 +3,5 @@ struct ll (val::int, next::bst);
 let (
   x:=(new ll)
 ) { 
-  add1 (5) 
+  add1 5 
 }

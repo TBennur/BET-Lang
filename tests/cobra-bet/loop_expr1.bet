@@ -1,22 +1,22 @@
 let (
-  a:=(2),
-  b:=(3),
-  c:=(0),
-  i:=(0),
-  j:=(0)
+  a:=2,
+  b:=3,
+  c:=0,
+  i:=0,
+  j:=0
 ) { 
   do { 
-    j := (0);
+    j := 0;
     do { 
-      c := (sub1 (c));
-      j := (add1 (j));
+      c := (sub1 c);
+      j := (add1 j);
       c 
-    } until ( 
-      (j) >= (b) 
+    } until (
+      j >= b 
     );
-    i := (add1 (i));
+    i := (add1 i);
     c 
-  } until ( 
-    (i) >= (a) 
+  } until (
+    i >= a 
   ) 
 }

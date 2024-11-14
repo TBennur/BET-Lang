@@ -7,5 +7,5 @@ fun ll ()::int {
 let (
   x:=(new ll)
 ) { 
-  add1 (5) 
+  add1 5 
 }

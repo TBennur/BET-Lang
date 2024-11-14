@@ -4,10 +4,10 @@ let (
   x:=(new ll),
   y:=(new ll)
 ) { 
-  print (x);
-  x.val := (1);
-  x.next := (y);
-  y.val := (2);
-  print (x.val);
+  print x;
+  x.val := 1;
+  x.next := y;
+  y.val := 2;
+  print x.val;
   x.next.val 
 }

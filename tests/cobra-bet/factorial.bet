@@ -1,12 +1,12 @@
 let (
-  i:=(1),
-  acc:=(1)
+  i:=1,
+  acc:=1
 ) { 
   do { 
-    acc := ((acc) * (i));
-    i := ((i) + (1));
+    acc := (acc * i);
+    i := (i + 1);
     acc 
-  } until ( 
-    (i) > (input) 
+  } until (
+    i > input 
   ) 
 }

@@ -63,7 +63,7 @@ fun function12 ()::int {
 };
 
 fun function21 ()::int {
-  print (100)
+  print 100
 };
 
 fun function8 ()::int {
