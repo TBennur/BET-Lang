@@ -120,7 +120,7 @@ fn parse_bet_expr(lexpr: &Lexpr) -> Expr {
 
             // do {} while () loop
             [Atom(S(do_kwd)), body_block, Atom(S(while_kwd)), ParenList(cond)]
-                if do_kwd == "do" && while_kwd == "while" =>
+                if do_kwd == "do" && while_kwd == "until" =>
             {
                 let cond = match &cond[..] {
                     [one] => one,
@@ -165,6 +165,11 @@ fn parse_bet_expr(lexpr: &Lexpr) -> Expr {
                     name_to_string(field_name, NameType::StructFieldName),
                     Box::new(parse_bet_expr(new_val)),
                 )
+            }
+
+            // account for negative numbers, as the lexer can't handle them
+            [Atom(S(neg)), Atom(I(n))] if neg == "-"  => {
+                parse_bet_expr(&Atom(I(n * -1)))
             }
 
             _ => panic!("Invalid list: {:#?}", vec),
