@@ -31,7 +31,7 @@ fun search (tree::bst, searchVal::int)::bst {
 fun addTree (tree::bst, newVal::int)::bst {
   if ((tree) == (null bst)) { 
     let (
-      newTree:=(newBST)
+      newTree:=(newBST())
     ) { 
       newTree.val := (newVal);
       newTree 
@@ -45,7 +45,7 @@ fun addTree (tree::bst, newVal::int)::bst {
       } else { 
         if ((cur) < (newVal)) { 
           if ((tree.right) == (null bst)) { 
-            tree.right := (newBST);
+            tree.right := (newBST());
             tree.right.val := (newVal);
             tree 
           } else { 
@@ -54,7 +54,7 @@ fun addTree (tree::bst, newVal::int)::bst {
           } 
         } else { 
           if ((tree.left) == (null bst)) { 
-            tree.left := (newBST);
+            tree.left := (newBST());
             tree.left.val := (newVal);
             tree 
           } else { 

@@ -17,6 +17,7 @@ fun iseven (n::int)::bool {
     isodd(sub1 (n)) 
   }
 };
-
-print (input);
-print (iseven(input))
+{
+  print (input);
+  print (iseven(input))
+}

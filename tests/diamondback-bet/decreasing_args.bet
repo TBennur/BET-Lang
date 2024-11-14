@@ -3,7 +3,7 @@ fun function0 ()::int {
 };
 
 fun function1 (x0::bool)::int {
-  function0
+  function0()
 };
 
 fun function2 (x0::int, x1::bool)::int {

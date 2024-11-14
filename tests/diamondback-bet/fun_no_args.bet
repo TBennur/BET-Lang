@@ -6,4 +6,4 @@ fun printtest ()::int {
   1
 };
 
-printtest
+printtest()
