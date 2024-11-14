@@ -50,7 +50,7 @@ fn main() -> std::io::Result<()> {
     if let Ok(mut new_in_file) = File::open(new_in_path.clone()) {
         let mut new_in_contents = String::new();
         new_in_file.read_to_string(&mut new_in_contents)?;
-        let lexed = lex::lex(&new_in_contents);
+        let lexed = lex::lex(&new_in_contents, lex::LexerConfig::default());
         println!("{:#?}", lexed);
     };
 

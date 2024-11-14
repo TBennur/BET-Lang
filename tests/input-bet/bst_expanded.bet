@@ -1,12 +1,23 @@
-struct bst(val::int,left::bst,right::bst);
+struct bst (val::int, left::bst, right::bst);
 
-fun newBST()::bst{new bst};
+fun newBST ()::bst {
+  new bst
+};
 
-fun setVal(tree::bst,newVal::int)::bst{tree.val := (newVal);tree};
+fun setVal (tree::bst, newVal::int)::bst {
+  tree.val := (newVal);
+  tree
+};
 
-fun setLeft(tree::bst,newLeft::bst)::bst{tree.left:=(newLeft);tree};
+fun setLeft (tree::bst, newLeft::bst)::bst {
+  tree.left := (newLeft);
+  tree
+};
 
-fun setRight(tree::bst,newRight::bst)::bst{tree.right:=(newRight);tree};
+fun setRight (tree::bst, newRight::bst)::bst {
+  tree.right := (newRight);
+  tree
+};
 
 fun search (tree::bst, searchVal::int)::bst {
   if ((tree) == (null bst)) { 

@@ -13,6 +13,66 @@ pub enum Lexpr {
     ParenList(Vec<Lexpr>),
 }
 
+pub struct LexerConfig {
+    operators: Vec<&'static str>,
+    ignore: Vec<char>,
+    open: Vec<char>,
+    closing: Vec<char>,
+    delims: Vec<char>,
+    default_delim: char,
+}
+
+impl LexerConfig {
+    pub fn default() -> Self {
+        Self {
+            // we split on operators, but they don't start a new list
+            operators: vec![
+                "::", // type annotation
+                "==", // strict equality
+                ">=", "<=", ":=", // let bindings or set
+                ".",  // update / access structs,
+                // ops
+                "+", "-", "*", "<", ">",
+            ],
+            ignore: vec![' ', '\t', '\n'],
+            open: vec!['(', '{'],
+            closing: vec![')', '}'],
+            delims: vec![',', ';'],
+            default_delim: ';', // the delim to use when not in any of open
+        }
+    }
+
+    fn is_ignore(&self, ch: char) -> bool {
+        self.ignore.contains(&ch)
+    }
+
+    fn is_open(&self, ch: char) -> bool {
+        self.open.contains(&ch)
+    }
+
+    fn is_close(&self, ch: char) -> bool {
+        self.closing.contains(&ch)
+    }
+
+    fn is_delim(&self, ch: char) -> bool {
+        self.delims.contains(&ch)
+    }
+
+    fn is_potential_operator(&self, op_so_far: &String) -> bool {
+        is_prefix_of_any(op_so_far, &self.operators)
+    }
+
+    fn is_op_start(&self, ch: char) -> bool {
+        for op in &self.operators {
+            assert!(op.len() > 0);
+            if op.chars().nth(0).unwrap() == ch {
+                return true;
+            };
+        }
+        false
+    }
+}
+
 struct LexState {
     opening_ind: Option<usize>, // NONE or index
     context: Vec<Lexpr>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
@@ -23,10 +83,10 @@ struct LexState {
 
 fn atom_from(s: String) -> Atom {
     if let Ok(x) = s.parse() {
-        return  Atom::I(x);
+        return Atom::I(x);
     };
     if let Ok(x) = s.parse() {
-        return  Atom::F(x);
+        return Atom::F(x);
     };
 
     Atom::S(s)
@@ -51,7 +111,7 @@ impl LexState {
         self.finding_operator = false;
     }
 
-    fn split_partial_list(&mut self) {
+    fn _split_partial_list(&mut self) {
         if self.partial_list.len() == 0 {
             return;
         }
@@ -65,6 +125,12 @@ impl LexState {
 
         self.context.push(expr);
     }
+
+    /// Add the current list, if it's non-empty, unwrapping it if needed
+    fn split_partial_list(&mut self) {
+        self.split_partial_str();
+        self._split_partial_list();
+    }
 }
 
 fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
@@ -74,63 +140,37 @@ fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
     }
 }
 
-fn is_operator_start(operators: &Vec<&str>, ch: char) -> bool {
-    for op in operators {
-        assert!(op.len() > 0);
-        if op.chars().nth(0).unwrap() == ch {
-            return true;
-        };
-    }
-    false
-}
-
-fn is_prefix_of_any(prefix: &String, vec: &[&str]) -> bool {
+fn is_prefix_of_any(prefix: &String, vec: &Vec<&str>) -> bool {
     vec.iter().any(|s| s.starts_with(prefix))
 }
 
-pub fn lex(s: &String) -> Lexpr {
-    // we split on operators, but they don't start a new list
-    let operators = vec![
-        "::", // type annotation
-        "==", // strict equality
-        ">=", "<=", ":=", // let bindings or set
-        ".",  // update / access structs,
-        // ops
-        "+", "-", "*", "<", ">",
-    ];
-
-    let ignore = vec![' ', '\t', '\n'];
-    let open = vec!['(', '{'];
-    let closing = vec![')', '}'];
-    let delims = vec![',', ';'];
-    let default_delim = ';'; // the delim to use when not in any of open
-
+pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
     let mut stack: Vec<LexState> = Vec::new(); // tuple of index which the context belongs to, and the context
     let mut state = LexState::new(None);
 
     for (i, ch) in s.char_indices() {
         match ch {
-            ch if ignore.contains(&ch) => {
+            ch if conf.is_ignore(ch) => {
                 state.split_partial_str();
             }
 
-            ch if open.contains(&ch) => {
+            ch if conf.is_open(ch) => {
                 state.split_partial_str();
 
                 // push old context
                 stack.push(state);
 
                 // make new context
-                let curr_opening_ind = index_of(&open, ch).unwrap();
+                let curr_opening_ind = index_of(&conf.open, ch).unwrap();
                 state = LexState::new(Some(curr_opening_ind));
             }
 
-            ch if closing.contains(&ch) => {
-                let closing_index = index_of(&closing, ch).unwrap();
+            ch if conf.is_close(ch) => {
+                let closing_index = index_of(&conf.closing, ch).unwrap();
 
                 if Some(closing_index) != state.opening_ind {
                     let expected = match state.opening_ind {
-                        Some(ind) => Some(closing[ind]),
+                        Some(ind) => Some(conf.closing[ind]),
                         None => None,
                     };
                     panic!(
@@ -140,8 +180,7 @@ pub fn lex(s: &String) -> Lexpr {
                 }
 
                 // we have a valid closing
-                state.split_partial_str(); // split off the current string
-                state.split_partial_list(); // add the current list, if it's non-empty, unwrapping it if needed
+                state.split_partial_list();
 
                 // pop from previous closures, adding this closure to its partial_list
                 match stack.pop() {
@@ -149,7 +188,7 @@ pub fn lex(s: &String) -> Lexpr {
                     Some(updated_state) => {
                         let old_state = std::mem::replace(&mut state, updated_state);
                         assert!(state.partial_str.len() == 0);
-                        state.partial_list.push(match open[closing_index] {
+                        state.partial_list.push(match conf.open[closing_index] {
                             '{' => Lexpr::CurlyList(old_state.context),
                             '(' => Lexpr::ParenList(old_state.context),
                             _ => unreachable!(),
@@ -158,17 +197,16 @@ pub fn lex(s: &String) -> Lexpr {
                 }
             }
 
-            ch if delims.contains(&ch) => {
+            ch if conf.is_delim(ch) => {
                 let expected_delim = match state.opening_ind {
-                    Some(expected_ind) => delims[expected_ind],
-                    None => default_delim,
+                    Some(expected_ind) => conf.delims[expected_ind],
+                    None => conf.default_delim,
                 };
                 if expected_delim != ch {
                     panic!("Mismatched delimiter: got {ch} when we expected {expected_delim}");
                 }
 
                 // delimiter matches; split off the partial_string, then the partial_list
-                state.split_partial_str();
                 state.split_partial_list();
             }
 
@@ -177,7 +215,7 @@ pub fn lex(s: &String) -> Lexpr {
                 if state.finding_operator {
                     let mut op_so_far = state.partial_str.to_string();
                     op_so_far.push(ch);
-                    if is_prefix_of_any(&op_so_far, &operators) {
+                    if conf.is_potential_operator(&op_so_far) {
                         // continue building
                         state.partial_str.push(ch);
                         continue;
@@ -188,7 +226,7 @@ pub fn lex(s: &String) -> Lexpr {
                 }
 
                 // check if this is a start of the operator
-                if is_operator_start(&operators, ch) {
+                if conf.is_op_start(ch) {
                     assert!(!state.finding_operator); // as if it was, we either split the partial_str (setting to false) or continued
                     state.split_partial_str();
                     state.partial_str.push(ch);
@@ -208,9 +246,6 @@ pub fn lex(s: &String) -> Lexpr {
     if stack.len() != 0 {
         panic!("Invalid: open and closing don't match");
     }
-    state.split_partial_str();
     state.split_partial_list();
     Lexpr::List(state.context)
 }
-
-fn ignore() {}
