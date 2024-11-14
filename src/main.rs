@@ -2,6 +2,7 @@ mod compile;
 mod consts;
 mod lex;
 mod parse;
+mod parse_bet;
 mod semantics;
 mod structs;
 mod typecheck;
@@ -13,6 +14,7 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 
+use parse_bet::parse_bet_program;
 use sexp::*;
 
 fn transform_path(original_path: &str) -> std::path::PathBuf {
@@ -46,13 +48,6 @@ fn main() -> std::io::Result<()> {
 
     let in_name = &args[1];
     let out_name = &args[2];
-    let new_in_path = transform_path(&in_name);
-    if let Ok(mut new_in_file) = File::open(new_in_path.clone()) {
-        let mut new_in_contents = String::new();
-        new_in_file.read_to_string(&mut new_in_contents)?;
-        let lexed = lex::lex(&new_in_contents, lex::LexerConfig::default());
-        println!("{:#?}", lexed);
-    };
 
     let mut in_file = File::open(in_name)?;
     let mut in_contents = String::new();
@@ -65,6 +60,18 @@ fn main() -> std::io::Result<()> {
     };
 
     let asm_program = compile_prog(&prog);
+
+    // we have a program which compiled for snek; make sure it still compiles
+    let new_in_path = transform_path(&in_name);
+    if let Ok(mut new_in_file) = File::open(new_in_path.clone()) {
+        let mut new_in_contents = String::new();
+        new_in_file.read_to_string(&mut new_in_contents)?;
+        let lexed = lex::lex(&new_in_contents, lex::LexerConfig::default());
+        let bet_prog = parse_bet_program(&lexed);
+        let bet_compiled = compile_prog(&bet_prog);
+        assert!(bet_compiled == asm_program);
+    };
+    
 
     let mut out_file = File::create(out_name)?;
     out_file.write_all(asm_program.as_bytes())?;

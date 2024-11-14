@@ -1,5 +1,5 @@
 use crate::{
-    consts::{ENTRYPOINT_LABEL, MAIN_LABEL, ERROR_LABEL},
+    consts::{ENTRYPOINT_LABEL, ERROR_LABEL, MAIN_LABEL},
     structs::*,
 };
 use once_cell::sync::Lazy;
@@ -21,6 +21,12 @@ pub static STRUCT_NUM_TO_NAME: Lazy<Mutex<HashMap<i32, String>>> =
 pub static STRUCT_NAME_TO_NUM: Lazy<Mutex<HashMap<String, i32>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
+pub static UNOPS: Lazy<HashSet<&'static str>> =
+    Lazy::new(|| HashSet::from(["print", "add1", "sub1"]));
+
+pub static BET_BINOPS: Lazy<HashSet<&'static str>> =
+    Lazy::new(|| HashSet::from(["==", ">=", "<=", "+", "-", "*", "<", ">"]));
+
 static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     HashSet::from([
         /* --- Types --- */
@@ -37,7 +43,6 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "if",
         "block",
         "repeat-until",
-        "print",
         /* Bin Ops */
         "+",
         "-",
@@ -48,6 +53,7 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "<=",
         "<",
         /* --- Un Ops --- */
+        "print",
         "add1",
         "sub1",
         /* --- Reserved Labels --- */

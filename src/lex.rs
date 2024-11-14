@@ -1,11 +1,11 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Atom {
     S(String),
     I(i64),
     F(f64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Lexpr {
     Atom(Atom),
     List(Vec<Lexpr>),
