@@ -1,21 +1,19 @@
-fun square (n::int)::int {
-  (n) * (n)
+fun square(n::int)::int{
+    n * n
 };
 
-fun printUntil (n::int)::int {
-  let (
-    i:=(1)
-  ) { 
-    do { 
-      print (i);
-      print (square(i));
-      i := (add1 (i)) 
-    } until ( 
-      (i) == (n) 
-    );
-    print (i);
-    square(i) 
-  }
+fun printUntil(n::int)::int{
+    let (
+        i := 1
+    ){
+        do {
+            print i;
+            print square(i);
+            i:=add1 i
+        } until (i == n);
+        print i;
+        square(i)
+    }
 };
 
 printUntil(input)

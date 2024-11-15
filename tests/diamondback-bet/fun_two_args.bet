@@ -1,5 +1,5 @@
-fun fun1 (m::int, n::int)::int {
-  (m) * (n)
+fun fun1(m::int, n::int)::int{
+    m * n
 };
 
-(fun1(3, 3)) + (fun1(4, 4))
+(fun1(3,3)) + (fun1(4,4))

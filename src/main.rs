@@ -5,6 +5,7 @@ mod parse;
 mod parse_bet;
 mod semantics;
 mod structs;
+mod transpile;
 mod typecheck;
 
 use crate::compile::compile_prog;
@@ -61,18 +62,21 @@ fn main() -> std::io::Result<()> {
 
     let asm_program = compile_prog(&prog);
 
+
+
+
+    // construct the bet program from the AST
+    let bet_prog_str = transpile::prog_to_bet(&prog);
+    let bet_lexed = lex::lex(&bet_prog_str, lex::LexerConfig::default());
+    let bet_prog = parse_bet_program(&bet_lexed);
+    let bet_compiled = compile_prog(&bet_prog); // make sure it still compiles
+    assert!(bet_compiled == asm_program);
+    
     // we have a program which compiled for snek; make sure it still compiles
     let new_in_path = transform_path(&in_name);
-    if let Ok(mut new_in_file) = File::open(new_in_path.clone()) {
-        let mut new_in_contents = String::new();
-        new_in_file.read_to_string(&mut new_in_contents)?;
-        let lexed = lex::lex(&new_in_contents, lex::LexerConfig::default());
-        let bet_prog = parse_bet_program(&lexed);
-        let bet_compiled = compile_prog(&bet_prog);
-        assert!(bet_compiled == asm_program);
-    };
-    
+    File::create(&new_in_path).and_then(|mut file| file.write_all(bet_prog_str.as_bytes()));
 
+    
     let mut out_file = File::create(out_name)?;
     out_file.write_all(asm_program.as_bytes())?;
 

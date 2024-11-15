@@ -1,11 +1,9 @@
-struct ll (val::int, next::ll);
+struct ll(val::int, next::ll);
 
 let (
-  x:=(new ll)
-) { 
-  do { 
-    x := (new ll) 
-  } until ( 
-    false 
-  ) 
+    x := new ll
+){
+    do {
+        x:=new ll
+    } until (false)
 }

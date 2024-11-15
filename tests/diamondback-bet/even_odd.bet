@@ -1,23 +1,24 @@
-fun isodd (n::int)::bool {
-  if ((n) < (0)) { 
-    isodd((0) - (n)) 
-  } else { 
-    if ((n) == (0)) { 
-      false 
-    } else { 
-      iseven(sub1 (n)) 
-    } 
-  }
+fun isodd(n::int)::bool{
+    if (n < 0){
+        isodd(0 - n)
+    }else{
+        if (n == 0){
+            false
+        }else{
+            iseven(sub1 n)
+        }
+    }
 };
 
-fun iseven (n::int)::bool {
-  if ((n) == (0)) { 
-    true 
-  } else { 
-    isodd(sub1 (n)) 
-  }
+fun iseven(n::int)::bool{
+    if (n == 0){
+        true
+    }else{
+        isodd(sub1 n)
+    }
 };
+
 {
-  print (input);
-  print (iseven(input))
+    print input;
+    print iseven(input)
 }

@@ -190,7 +190,7 @@ fn parse_bet_expr(lexpr: &Lexpr) -> Expr {
         }
 
         // ParenList: a sequence of lexprs which were wrapped in parens
-        // at this point, we only expect there to be one element-- these parens only exist for lexing
+        // at this point, we only expect there to be one element-- these parens only exist for lexing / are additional parens
         ParenList(vec) => {
             if let [one] = &vec[..] {
                 parse_bet_expr(one)
@@ -339,7 +339,7 @@ pub fn parse_bet_program(lexpr: &Lexpr) -> Prog {
         }
 
         // must be illegal!
-        panic!("Invalid: Improperly formed defenition {:?}", definition)
+        panic!("Invalid: Improperly formed defenition {:#?}", definition)
     }
 
     Prog::Program(struct_defs, fn_defs, parse_bet_expr(body))

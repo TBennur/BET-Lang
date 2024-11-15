@@ -70,6 +70,17 @@ pub enum Op1 {
     Print,
 }
 
+impl fmt::Display for Op1 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let output = match self {
+            Op1::Add1 => "add1",
+            Op1::Sub1 => "sub1",
+            Op1::Print => "print",
+        };
+        write!(f, "{}", output)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Op2 {
     Plus,
@@ -80,6 +91,22 @@ pub enum Op2 {
     GreaterEqual,
     Less,
     LessEqual,
+}
+
+impl fmt::Display for Op2 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let output = match self {
+            Op2::Plus => "+",
+            Op2::Minus => "-",
+            Op2::Times => "*",
+            Op2::Equal => "==",
+            Op2::Greater => ">",
+            Op2::GreaterEqual => ">=",
+            Op2::Less => "<",
+            Op2::LessEqual => "<=",
+        };
+        write!(f, "{}", output)
+    }
 }
 
 /* --- Parsed, not Type-checked --- */

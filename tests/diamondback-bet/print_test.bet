@@ -1,5 +1,5 @@
 {
-    print (5);
-    print (4);
-    print (input)
+    print 5;
+    print 4;
+    print input
 }
