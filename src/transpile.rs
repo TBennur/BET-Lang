@@ -103,15 +103,17 @@ fn wrap_as_block(s: String) -> String {
     format!("{{\n{indented}\n}}")
 }
 
+const PAREN_SPAM: bool = false;
+
 fn expression_to_bet(expr: &Expr) -> String {
-    match expr {
+    let regular = match expr {
         Expr::Number(x) => {
             if *x >= 0 {
                 x.to_string()
-            }else {
-                format!("({})", x.to_string())
+            } else {
+                format!("~{}", (-x).to_string())
             }
-        },
+        }
         Expr::Boolean(b) => b.to_string(),
         Expr::Id(name) => name.to_string(),
         Expr::Let(bindings, body) => {
@@ -219,5 +221,14 @@ fn expression_to_bet(expr: &Expr) -> String {
             let ptr_str = expression_to_bet(ptr);
             format!("{ptr_str}.{field_name}") // don't need to wrap as ".field_name" is matched from right to left
         }
+    };
+
+    if PAREN_SPAM {
+        match expr {
+            Expr::Block(_) => regular,
+            _ => format!("({})", regular),
+        }
+    } else {
+        regular
     }
 }

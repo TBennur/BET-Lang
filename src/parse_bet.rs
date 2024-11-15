@@ -84,7 +84,18 @@ fn parse_bet_expr(lexpr: &Lexpr) -> Expr {
                 )
             }
 
-            // unops
+            // non-alphanum uops
+            [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(&uop.as_str()) => {
+                match uop.as_str() {
+                    "~" => match parse_bet_expr(receiver) {
+                        Expr::Number(x) => Expr::Number(-x),
+                        _ => unimplemented!(), // unary negation not yet implemented for anything other than string literals
+                    },
+                    s => panic!("Invalid: Unknown sticky unary operation {:?}", s),
+                }
+            }
+
+            // alphanum unops
             [Atom(S(op1)), rest @ ..] if UNOPS.contains(&op1.as_str()) => Expr::UnOp(
                 match op1.as_str() {
                     "add1" => Op1::Add1,
@@ -168,9 +179,7 @@ fn parse_bet_expr(lexpr: &Lexpr) -> Expr {
             }
 
             // account for negative numbers, as the lexer can't handle them
-            [Atom(S(neg)), Atom(I(n))] if neg == "-"  => {
-                parse_bet_expr(&Atom(I(n * -1)))
-            }
+            [Atom(S(neg)), Atom(I(n))] if neg == "-" => parse_bet_expr(&Atom(I(n * -1))),
 
             _ => panic!("Invalid list: {:#?}", vec),
         },

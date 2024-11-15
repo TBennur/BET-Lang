@@ -18,4 +18,4 @@ fun function4(x0::int, x1::int, x2::bool, x3::int)::int{
     function3(x3,x1,x2)
 };
 
-function4((-2),234,true,(-12345))
+function4(~2,234,true,~12345)

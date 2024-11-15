@@ -14,6 +14,7 @@ pub enum Lexpr {
 }
 
 pub struct LexerConfig {
+    unaryops: Vec<char>,
     operators: Vec<&'static str>,
     ignore: Vec<char>,
     open: Vec<char>,
@@ -25,6 +26,10 @@ pub struct LexerConfig {
 impl LexerConfig {
     pub fn default() -> Self {
         Self {
+            // unary operators stick to the next thing pushed-- the next string if a
+            // non-empty string is pushed next, or the next list if a list is pushed next
+            unaryops: vec!['~'],
+
             // we split on operators, but they don't start a new list
             operators: vec![
                 "::", // type annotation
@@ -71,10 +76,15 @@ impl LexerConfig {
         }
         false
     }
+
+    fn is_unary_op(&self, ch: char) -> bool {
+        self.unaryops.contains(&ch)
+    }
 }
 
 struct LexState {
-    opening_ind: Option<usize>, // NONE or index
+    active_unary_ops: Option<Vec<char>>, // NONE or the unary op we have
+    opening_ind: Option<usize>,          // NONE or index
     context: Vec<Lexpr>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
     partial_list: Vec<Lexpr>, // the list which composes the current list, such as
     partial_str: String,
@@ -95,6 +105,7 @@ fn atom_from(s: String) -> Atom {
 impl LexState {
     fn new(opening_ind: Option<usize>) -> LexState {
         LexState {
+            active_unary_ops: None,
             opening_ind,
             context: Vec::new(),
             partial_list: Vec::new(),
@@ -106,7 +117,20 @@ impl LexState {
     fn split_partial_str(&mut self) {
         if self.partial_str.len() > 0 {
             let complete_str = std::mem::replace(&mut self.partial_str, "".to_string());
-            self.partial_list.push(Lexpr::Atom(atom_from(complete_str)));
+            let str_atom = Lexpr::Atom(atom_from(complete_str));
+            let mut to_push = str_atom;
+
+            if let Some(ref mut uops) = self.active_unary_ops {
+                while uops.len() > 0 {
+                    // since we pushed to the back, pop to get most recent
+                    let cur_uop = uops.pop().unwrap();
+                    let uop_atom = Lexpr::Atom(Atom::S(cur_uop.to_string()));
+                    to_push = Lexpr::List(vec![uop_atom, to_push]);
+                }
+                self.active_unary_ops = None;
+            }
+
+            self.partial_list.push(to_push);
         }
         self.finding_operator = false;
     }
@@ -117,19 +141,36 @@ impl LexState {
         }
 
         let completed_list = std::mem::replace(&mut self.partial_list, Vec::new());
-        let expr = match completed_list.len() {
+        let mut to_push = match completed_list.len() {
             0 => unreachable!(),
             1 => completed_list.into_iter().next().unwrap(),
             _ => Lexpr::List(completed_list),
         };
 
-        self.context.push(expr);
+        if let Some(ref mut uops) = self.active_unary_ops {
+            while uops.len() > 0 {
+                // since we pushed to the back, pop to get most recent
+                let cur_uop = uops.pop().unwrap();
+                let uop_atom = Lexpr::Atom(Atom::S(cur_uop.to_string()));
+                to_push = Lexpr::List(vec![uop_atom, to_push]);
+            }
+            self.active_unary_ops = None;
+        }
+
+        self.context.push(to_push);
     }
 
     /// Add the current list, if it's non-empty, unwrapping it if needed
     fn split_partial_list(&mut self) {
         self.split_partial_str();
         self._split_partial_list();
+    }
+
+    fn encounter_unary_op(&mut self, uop: char) {
+        match &mut self.active_unary_ops {
+            Some(vec) => vec.push(uop),
+            None => self.active_unary_ops = Some(vec![uop]),
+        };
     }
 }
 
@@ -187,6 +228,11 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
                     None => unreachable!("We started with a curr_opening_ind == -1"),
                     Some(updated_state) => {
                         let old_state = std::mem::replace(&mut state, updated_state);
+                        if let Some(vec) = old_state.active_unary_ops {
+                            assert!(vec.len() > 0);
+                            panic!("Had unary ops which weren't bound: {:?}", vec)
+                        }
+                        
                         assert!(state.partial_str.len() == 0);
                         state.partial_list.push(match conf.open[closing_index] {
                             '{' => Lexpr::CurlyList(old_state.context),
@@ -208,6 +254,11 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
 
                 // delimiter matches; split off the partial_string, then the partial_list
                 state.split_partial_list();
+            }
+
+            ch if conf.is_unary_op(ch) => {
+                state.encounter_unary_op(ch);
+                continue;
             }
 
             ch if ch.is_ascii() => {
