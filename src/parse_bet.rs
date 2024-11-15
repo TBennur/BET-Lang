@@ -178,9 +178,6 @@ fn parse_bet_expr(lexpr: &Lexpr) -> Expr {
                 )
             }
 
-            // account for negative numbers, as the lexer can't handle them
-            [Atom(S(neg)), Atom(I(n))] if neg == "-" => parse_bet_expr(&Atom(I(n * -1))),
-
             _ => panic!("Invalid list: {:#?}", vec),
         },
 
