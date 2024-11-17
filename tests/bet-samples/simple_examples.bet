@@ -1,0 +1,13 @@
+struct ll (val::int, next::ll);
+
+let (
+  x:=(new ll),
+  y:=(new ll)
+) { 
+  x.val := 1;
+  y.val := 2;
+  x.next := y;
+  print x.val;
+  print y.val;
+  x.next.val 
+}

@@ -64,3 +64,114 @@ Please note: the braces, `[]`, are currently not used for anything; they just se
 
 <binding> := <identifier> := <expr>
 ```
+
+# Tests
+We wrote a transpiler to exhaustively test our new syntax. The transpile.py and transpile.rs files can rewrite any .snek 
+programs into their .bet counterparts. Updated versions of eggeater programs can be found in bet-samples. We have new 
+versions of the bst, factorial, fibonnaci points and simple_examples success files. We also have a few failure examples, 
+labeled as parse_*_fail.bet, to illustrate invalid syntax. 
+
+We will now walk through the new bst syntax to illustrate our improvements.
+
+```
+struct bst (val::int, left::bst, right::bst); # C-like structure definitions
+
+fun newBST ()::bst { # C-like function syntax with type annotations
+  new bst
+};
+
+fun setVal (tree::bst, newVal::int)::bst {
+  tree.val := newVal; # Block syntax - everything has a semicolon except the last entry in a block
+  tree
+};
+
+fun setLeft (tree::bst, newLeft::bst)::bst {
+  tree.left := newLeft; @ Walrus operator for assignation
+  tree
+};
+
+fun setRight (tree::bst, newRight::bst)::bst {
+  tree.right := newRight;
+  tree
+};
+
+fun search (tree::bst, searchVal::int)::bst {
+  if (tree == (null bst)) { # C-like conditional syntax
+    null bst 
+  } else { 
+    let (
+      cur:=tree.val
+    ) { 
+      if (cur == searchVal) { 
+        tree 
+      } else { 
+        if (cur < searchVal) { 
+          search(tree.right, searchVal) # Clean function calls 
+        } else { 
+          search(tree.left, searchVal) 
+        } 
+      } 
+    } 
+  }
+};
+
+fun addTree (tree::bst, newVal::int)::bst {
+  if (tree == (null bst)) { 
+    let (
+      newTree:=newBST
+    ) { 
+      newTree.val := newVal;
+      newTree 
+    } 
+  } else { 
+    let (
+      cur:=tree.val
+    ) { 
+      if (cur == newVal) { 
+        tree 
+      } else { 
+        if (cur < newVal) { 
+          if (tree.right == (null bst)) { # Pointer comparison 
+            tree.right := newBST;
+            tree.right.val := newVal;
+            tree 
+          } else { 
+            tree.right := (addTree(tree.right, newVal));
+            tree 
+          } 
+        } else { 
+          if (tree.left == (null bst)) { 
+            tree.left := newBST;
+            tree.left.val := newVal;
+            tree 
+          } else { 
+            tree.left := (addTree(tree.left, newVal));
+            tree 
+          } 
+        } 
+      } 
+    } 
+  }
+};
+
+let (
+  x:=(null bst)
+) { 
+  x := (addTree(x, 4)); # Use () wrappers to force a value and rmeove parsing ambiguity
+  print x;
+  print x.left;
+  print x.right;
+  x := (addTree(x, 3));
+  print x;
+  print x.left;
+  print x.right;
+  x := (addTree(x, 2));
+  print x;
+  print x.left;
+  print x.right;
+  x := (addTree(x, 5));
+  print x;
+  print x.left;
+  x.right 
+}
+```
