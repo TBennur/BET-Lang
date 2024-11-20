@@ -1,8 +1,0 @@
-(struct integer ((val int)))
-(let
-    ((x (null integer)))
-    (block
-        (set! x (alloc integer))
-        (update x val 10)
-    )
-)

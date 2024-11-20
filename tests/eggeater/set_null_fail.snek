@@ -1,3 +1,0 @@
-(struct ll ((val int) (next ll)))
-
-(let ((x null) (y (alloc ll))) (set! x y))

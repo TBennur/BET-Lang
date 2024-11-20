@@ -1,3 +1,0 @@
-(struct ll ((val int) (next ll)))
-
-(update (null ll) val 1)

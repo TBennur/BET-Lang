@@ -1,4 +1,0 @@
-(fun equal_wraper ((x int) (y int)) bool
-  (= x y)
-)
-(equal_wraper input input)

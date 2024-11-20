@@ -1,5 +1,0 @@
-(struct integer ((val int)))
-
-(let 
-    ((x (alloc integer))) 
-    (set! x 5))

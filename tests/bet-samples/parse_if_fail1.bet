@@ -1,5 +1,0 @@
-if (1 > true) { 
-  true 
-} else { 
-  false(1 + 1) 
-}

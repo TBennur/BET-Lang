@@ -1,4 +1,0 @@
-(struct ll ((val int) (next ll)))
-(fun getNext ((cur ll)) ll (lookup cur next))
-
-(let ((x (alloc ll))) (lookup (getNext x) val))

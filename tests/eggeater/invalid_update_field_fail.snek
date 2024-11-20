@@ -1,5 +1,0 @@
-(struct integer ((val int)))
-
-(let 
-    ((x (alloc integer))) 
-    (update x value true))

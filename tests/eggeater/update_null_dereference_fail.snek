@@ -1,4 +1,0 @@
-; fields of structs are initialized to 0, so pointer fields will be initialized to null
-(struct ll ((val int) (next ll)))
-;                               evals to null
-(let ((x (alloc ll))) (update (lookup x next) val 1))

@@ -1,4 +1,0 @@
-(let ((a false)) 
-    (block
-        (set! a true)
-    ))

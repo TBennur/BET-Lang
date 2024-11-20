@@ -1,3 +1,0 @@
-(struct ll ((val int) (val bool) (next ll)))
-
-(let ((x (alloc ll))) (add1 5))

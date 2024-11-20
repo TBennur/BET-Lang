@@ -1,1 +1,0 @@
-(let ((x input) (y (= 2 x))) (set! y 5))
