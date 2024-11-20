@@ -1,0 +1,7 @@
+struct integer (val::int);
+
+let (
+  x:=(new integer)
+) { 
+  x.val := (true) 
+}

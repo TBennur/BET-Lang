@@ -1,0 +1,21 @@
+fun function0()::int{
+    12
+};
+
+fun function1(x0::bool)::int{
+    function0()
+};
+
+fun function2(x0::int, x1::bool)::int{
+    function1(x1)
+};
+
+fun function3(x0::int, x1::int, x2::bool)::int{
+    function2(x1,x2)
+};
+
+fun function4(x0::int, x1::int, x2::bool, x3::int)::int{
+    function3(x3,x1,x2)
+};
+
+function4(~2,234,true,~12345)

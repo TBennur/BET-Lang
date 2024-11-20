@@ -1,0 +1,9 @@
+fun printtest()::int{
+    print true;
+    print false;
+    print 0;
+    print ~1;
+    1
+};
+
+printtest()

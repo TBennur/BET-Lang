@@ -1,0 +1,10 @@
+let (
+    i := 1,
+    acc := 1
+){
+    do {
+        acc:=acc * i;
+        i:=i + 1;
+        acc
+    } until (i > input)
+}

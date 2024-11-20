@@ -1,0 +1,11 @@
+struct ll (val::int, next::ll);
+
+fun getNext (cur::ll)::ll {
+  cur.next
+};
+
+let (
+  x:=(new ll)
+) { 
+  getNext(x).val 
+}

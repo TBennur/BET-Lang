@@ -1,0 +1,9 @@
+fun fact(n::int)::int{
+    if (n < 1){
+        1
+    }else{
+        n * (print fact(sub1 n))
+    }
+};
+
+fact(7)

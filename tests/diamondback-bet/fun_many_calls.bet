@@ -1,0 +1,13 @@
+fun fun1(m::int, n::int)::int{
+    m * n
+};
+
+let (
+    x := 0
+){
+    do {
+        print fun1(x,input);
+        x:=add1 x;
+        0
+    } until (x > input)
+}

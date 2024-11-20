@@ -1,0 +1,8 @@
+struct integer (val::int);
+
+let (
+  x:=(new integer),
+  y:=(5)
+) { 
+  y.value := (true) 
+}

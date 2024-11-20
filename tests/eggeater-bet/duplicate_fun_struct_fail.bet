@@ -1,0 +1,11 @@
+struct ll (val::int, next::ll);
+
+fun ll ()::int {
+  12
+};
+
+let (
+  x:=(new ll)
+) { 
+  add1 (5) 
+}

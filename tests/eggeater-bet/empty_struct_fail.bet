@@ -1,0 +1,3 @@
+struct empty ();
+
+print (5)
