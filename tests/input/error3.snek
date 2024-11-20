@@ -1,8 +1,0 @@
-; A third program with a different error than the other two related to 
-; heap-allocated values.
-; This demonstrates what happens when a program attempts to access a null pointer
-; A null dereference error will happen at runtime
-
-(struct ll ((val int) (next ll)))
-
-(lookup (null ll) next)

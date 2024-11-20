@@ -9,7 +9,7 @@ ARCH := macho64
 target:= --target=x86_64-apple-darwin
 endif
 
-tests/%.s: tests/%.snek src/main.rs
+tests/%.s: tests/%.bet src/main.rs
 	cargo run -- $< tests/$*.s
 
 tests/%.run: tests/%.s runtime/start.rs

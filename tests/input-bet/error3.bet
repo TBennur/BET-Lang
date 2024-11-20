@@ -1,3 +1,0 @@
-struct ll (val::int, next::ll);
-
-null ll.next

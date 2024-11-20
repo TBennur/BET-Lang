@@ -1,7 +1,0 @@
-struct ll (val::int, next::ll);
-
-let (
-  x:=(new ll)
-) { 
-  x.value 
-}

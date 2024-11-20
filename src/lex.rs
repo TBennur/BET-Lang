@@ -188,7 +188,6 @@ fn is_prefix_of_any(prefix: &String, vec: &Vec<&str>) -> bool {
 pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
     let mut stack: Vec<LexState> = Vec::new(); // tuple of index which the context belongs to, and the context
     let mut state = LexState::new(None);
-
     for (i, ch) in s.char_indices() {
         match ch {
             ch if conf.is_ignore(ch) => {
