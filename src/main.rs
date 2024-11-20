@@ -1,22 +1,18 @@
 mod compile;
 mod consts;
 mod lex;
-mod parse;
 mod parse_bet;
 mod semantics;
 mod structs;
-mod transpile;
 mod typecheck;
 
 use crate::compile::compile_prog;
 
-use core::panic;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 
 use parse_bet::parse_bet_program;
-use sexp::*;
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();

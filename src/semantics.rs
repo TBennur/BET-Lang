@@ -85,7 +85,7 @@ pub fn id_to_string(id: &str) -> String {
 pub enum NameType {
     IdName,
     FunName,
-    FunParam,
+    // FunParam,
     StructName,
     StructFieldName,
 }
@@ -94,7 +94,7 @@ fn name_type_to_str(name_type: NameType) -> &'static str {
     match name_type {
         NameType::IdName => "Id",
         NameType::FunName => "Function Name",
-        NameType::FunParam => "Function Parameter",
+        // NameType::FunParam => "Function Parameter",
         NameType::StructName => "Struct Name",
         NameType::StructFieldName => "Struct Field Name",
     }
