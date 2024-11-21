@@ -10,11 +10,11 @@ target:= --target=x86_64-apple-darwin
 endif
 
 tests/%.s: tests/%.bet src/main.rs
-	cargo run -- $< tests/$*.s
+	cargo run -- $< tests/lib$*.s
 
 tests/%.run: tests/%.s runtime/start.rs
-	nasm -f $(ARCH) tests/$*.s -o tests/$*.o
-	ar rcs tests/lib$*.a tests/$*.o
+	nasm -f $(ARCH) tests/lib$*.s -o tests/lib$*.o
+	ar rcs tests/lib$*.a tests/lib$*.o
 	rustc -L tests/ -lour_code:$* runtime/start.rs -o tests/$*.run $(target)
 
 .PHONY: test

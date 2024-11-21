@@ -734,6 +734,31 @@ success_tests! {
         file: "eggeater/bst.bet",
         expected:"4\n3\n7\n1\nnull pointer to struct bst\n5\n8"
     },
+    {
+        name: final_basic_comment,
+        file: "final/basic_comment.bet",
+        expected:"5"
+    },
+    {
+        name: final_double_comment,
+        file: "final/double_comment.bet",
+        expected:"5"
+    },
+    {
+        name: final_escaped_comment,
+        file: "final/escaped_comment.bet",
+        expected:"5"
+    },
+    {
+        name: final_inline_comment,
+        file: "final/inline_comment.bet",
+        expected:"5"
+    },
+    {
+        name: final_special_comment,
+        file: "final/special_comment.bet",
+        expected:"5"
+    },
 }
 
 runtime_error_tests! {

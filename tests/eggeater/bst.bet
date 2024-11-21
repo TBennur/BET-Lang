@@ -1,3 +1,5 @@
+# Build a bst and basic bst functions
+
 struct bst(val::int,left::bst,right::bst);
 
 fun newBST()::bst{new bst};
@@ -85,12 +87,12 @@ let (
   x := (addTree(x, 7));
   x := (addTree(x, 5));
   x := (addTree(x, 8));
-  print (x.val);
-  print (x.left.val);
-  print (x.right.val);
-  print (x.left.left.val);
-  print (x.left.right);
-  print (x.right.left.val);
-  x.right.right.val
+  print (x.val); # 4
+  print (x.left.val); # 3
+  print (x.right.val); # 7
+  print (x.left.left.val); # 1
+  print (x.left.right); # null pointer to struct bst
+  print (x.right.left.val); # 5
+  x.right.right.val # 8
 
 }

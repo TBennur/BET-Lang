@@ -1,3 +1,5 @@
+use crate::strip::strip;
+
 #[derive(Debug, Clone)]
 pub enum Atom {
     S(String),
@@ -21,6 +23,8 @@ pub struct LexerConfig {
     closing: Vec<char>,
     delims: Vec<char>,
     default_delim: char,
+    comment_open: char,
+    comment_closing: char,
 }
 
 impl LexerConfig {
@@ -44,6 +48,8 @@ impl LexerConfig {
             closing: vec![')', '}'],
             delims: vec![',', ';'],
             default_delim: ';', // the delim to use when not in any of open
+            comment_open: '#',
+            comment_closing: '\n',
         }
     }
 
@@ -186,9 +192,10 @@ fn is_prefix_of_any(prefix: &String, vec: &Vec<&str>) -> bool {
 }
 
 pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
+    let s_stripped = strip(s, conf.comment_open, conf.comment_closing);
     let mut stack: Vec<LexState> = Vec::new(); // tuple of index which the context belongs to, and the context
     let mut state = LexState::new(None);
-    for (i, ch) in s.char_indices() {
+    for (i, ch) in s_stripped.char_indices() {
         match ch {
             ch if conf.is_ignore(ch) => {
                 state.split_partial_str();

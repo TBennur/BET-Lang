@@ -1,167 +1,258 @@
 use core::panic;
 
+use crate::lex;
 use crate::semantics::*;
 use crate::structs::*;
-use sexp::Atom::*;
-use sexp::*;
 
-fn parse_expr(s: &Sexp) -> Expr {
-    match s {
+use lex::Atom::{F, I, S};
+use lex::Lexpr;
+use lex::Lexpr::{Atom, CurlyList, List, ParenList};
+
+fn unwrap_lexpr_list<'a>(s: &[Lexpr]) -> Lexpr {
+    let owned = if s.len() == 0 {
+        unreachable!()
+    } else if s.len() == 1 {
+        s[0].to_owned()
+    } else {
+        List(s.to_vec())
+    };
+    owned
+}
+
+fn parse_binding(lexpr: &Lexpr) -> Result<(String, Expr), String> {
+    let tokens = match lexpr {
+        List(tokens) => tokens,
+        _ => panic!("Bindings must be a List of tokens, {:?}", lexpr),
+    };
+
+    match &tokens[..] {
+        [Atom(S(id)), Atom(S(walrus)), rest @ ..] if walrus == ":=" => {
+            Ok((id_to_string(id), parse_expr(&unwrap_lexpr_list(rest))))
+        }
+        _ => Err(format!("Not a valid binding: {:?}", lexpr)),
+    }
+}
+
+fn parse_expr(lexpr: &Lexpr) -> Expr {
+    match lexpr {
         // atoms
-        Sexp::Atom(I(n)) => match <i32>::try_from(*n) {
+        Atom(I(n)) => match <i32>::try_from(*n) {
             Ok(num) => Expr::Number(num),
             Err(err) => panic!("Invalid: Could not parse number, raised {:?} instead", err),
         },
-        Sexp::Atom(S(id)) => match id.as_str() {
+        Atom(S(id)) => match id.as_str() {
             "true" => Expr::Boolean(true),
             "false" => Expr::Boolean(false),
             "input" => Expr::Input,
             id => Expr::Id(id_to_string(id)), // panics if id is a keyword
         },
+        Atom(F(_f)) => unimplemented!(),
 
-        // vectors
-        Sexp::List(vec) => match &vec[..] {
-            // assume any vector whose first element isn't a keyword is a call
-            [Sexp::Atom(S(fun_name)), args @ ..] if !is_keyword(fun_name) => Expr::Call(
-                name_to_string(fun_name, NameType::FunName),
-                args.into_iter().map(parse_expr).collect(),
-            ),
+        // List: a sequence of lexprs which are one expression
+        List(vec) => match &vec[..] {
+            [Atom(S(if_kwd)), ParenList(cond_vec), true_block, Atom(S(else_kwd)), false_block]
+                if if_kwd == "if" && else_kwd == "else" =>
+            {
+                // if conditions must have exactly one element
+                let cond = match &cond_vec[..] {
+                    [_cond] => _cond,
+                    _ => panic!(
+                        "Invalid: 'if' condition which doesn't have one expr: {:?}",
+                        vec
+                    ),
+                };
 
-
-            // null
-            // has the form null <name>
-            [Sexp::Atom(S(op)), Sexp::Atom(S(struct_name))] if op == "null" => {
-                Expr::Null(name_to_string(struct_name, NameType::StructName))
-            }
-            // alloc
-            // has the form alloc <name>
-            [Sexp::Atom(S(op)), Sexp::Atom(S(struct_name))] if op == "alloc" => {
-                Expr::Alloc(name_to_string(struct_name, NameType::StructName))
-            }
-
-            // update
-            // has the form update e1 <name> e2
-            [Sexp::Atom(S(op)), e1, Sexp::Atom(S(field_name)), e2] if op == "update" => {
-                Expr::Update(
-                    Box::new(parse_expr(e1)),
-                    name_to_string(field_name, NameType::StructFieldName),
-                    Box::new(parse_expr(e2)),
+                Expr::If(
+                    Box::new(parse_expr(cond)),
+                    Box::new(parse_block(true_block).unwrap()),
+                    Box::new(parse_block(false_block).unwrap()),
                 )
             }
 
-            // lookup
-            // has the form lookup e <name>
-            [Sexp::Atom(S(op)), e, Sexp::Atom(S(field_name))] if op == "lookup" => Expr::Lookup(
-                Box::new(parse_expr(e)),
-                name_to_string(field_name, NameType::StructFieldName),
-            ),
-
-            // block
-            // has the form block <expr>+
-            [Sexp::Atom(S(op)), exprns @ ..] if op == "block" => {
-                if exprns.len() == 0 {
-                    panic!("Invalid: Empty block")
-                } else {
-                    Expr::Block(
-                        exprns
-                            .into_iter()
-                            .map(|element| parse_expr(element))
-                            .collect(),
-                    )
-                }
-            }
-
-            // set!
-            // has the form set <name> <expr>
-            [Sexp::Atom(S(op)), Sexp::Atom(S(name)), expr] if op == "set!" => {
-                Expr::Set(id_to_string(name), Box::new(parse_expr(expr)))
-            }
-
-            // repeat-until
-            // has the form repeat-until <expr> <expr>
-            [Sexp::Atom(S(op)), body, stop_cond] if op == "repeat-until" => {
-                Expr::RepeatUntil(Box::new(parse_expr(body)), Box::new(parse_expr(stop_cond)))
-            }
-
-            // if expression
-            // has the form if <expr> <expr> <expr>
-            [Sexp::Atom(S(op)), cond, then_case, else_case] if op == "if" => Expr::If(
-                Box::new(parse_expr(cond)),
-                Box::new(parse_expr(then_case)),
-                Box::new(parse_expr(else_case)),
-            ),
-
-            // let expression
-            // has the form let ((binding1), (binding2)) (in expression)
-            [Sexp::Atom(S(op)), Sexp::List(bindings), finally] if op == "let" => {
+            [Atom(S(keyword)), ParenList(bindings), scoped_block] if keyword == "let" => {
                 if bindings.len() == 0 {
-                    panic!("Invalid: Empty let block")
-                } else {
-                    Expr::Let(
-                        bindings
-                            .into_iter()
-                            .map(|element| match element {
-                                Sexp::List(binding) => match &binding[..] {
-                                    [Sexp::Atom(S(id)), e] => (id_to_string(id), parse_expr(e)),
-                                    s => panic!("Invalid: Improperly formed let binding {:?}", s),
-                                },
-                                s => panic!("Invalid: Improperly formed let expression {:?}", s),
-                            })
-                            .collect(),
-                        Box::new(parse_expr(finally)),
-                    )
+                    panic!("Invalid: Let binding with no bindings: {:?}", vec)
+                }
+
+                // parse each binding in the scoped block
+                Expr::Let(
+                    bindings
+                        .into_iter()
+                        .map(|binding| parse_binding(binding).unwrap())
+                        .collect(),
+                    Box::new(parse_block(scoped_block).unwrap()),
+                )
+            }
+
+            // non-alphanum uops
+            [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(&uop.as_str()) => {
+                match uop.as_str() {
+                    "~" => match parse_expr(receiver) {
+                        Expr::Number(x) => Expr::Number(-x),
+                        _ => unimplemented!(), // unary negation not yet implemented for anything other than string literals
+                    },
+                    s => panic!("Invalid: Unknown sticky unary operation {:?}", s),
                 }
             }
 
-            // match bin & un ops after everything else, so we don't try to
-            // match other "un" ops like, ex, set
+            // alphanum unops
+            [Atom(S(op1)), rest @ ..] if UNOPS.contains(&op1.as_str()) => Expr::UnOp(
+                match op1.as_str() {
+                    "add1" => Op1::Add1,
+                    "sub1" => Op1::Sub1,
+                    "print" => Op1::Print,
+                    s => panic!("Invalid: Unknown unary operation {:?}", s),
+                },
+                Box::new(parse_expr(&unwrap_lexpr_list(rest))),
+            ),
 
-            // bin ops (exactly three things in vec)
-            [Sexp::Atom(S(op)), arg1, arg2] => Expr::BinOp(
-                match op.as_str() {
+            // assume any vector whose first element isn't a keyword is a call
+            [Atom(S(fun_name)), ParenList(fun_args)] if !is_keyword(fun_name) => Expr::Call(
+                name_to_string(fun_name, NameType::FunName),
+                fun_args.into_iter().map(parse_expr).collect(),
+            ),
+
+            // binops
+            [lhs, Atom(S(op2)), rhs] if BET_BINOPS.contains(&op2.as_str()) => Expr::BinOp(
+                match op2.as_str() {
                     "+" => Op2::Plus,
                     "-" => Op2::Minus,
                     "*" => Op2::Times,
-                    "=" => Op2::Equal,
+                    "==" => Op2::Equal,
                     ">" => Op2::Greater,
                     ">=" => Op2::GreaterEqual,
                     "<" => Op2::Less,
                     "<=" => Op2::LessEqual,
                     s => panic!("Invalid: Unknown binary operation {:?}", s),
                 },
-                Box::new(parse_expr(arg1)),
-                Box::new(parse_expr(arg2)),
+                Box::new(parse_expr(lhs)),
+                Box::new(parse_expr(rhs)),
             ),
 
-            // un ops (exactly two things in vec)
-            [Sexp::Atom(S(op)), e] => Expr::UnOp(
-                match op.as_str() {
-                    "add1" => Op1::Add1,
-                    "sub1" => Op1::Sub1,
-                    "print" => Op1::Print,
-                    s => panic!("Invalid: Unknown unary operation {:?}", s),
-                },
-                Box::new(parse_expr(e)),
+            // do {} while () loop
+            [Atom(S(do_kwd)), body_block, Atom(S(while_kwd)), ParenList(cond)]
+                if do_kwd == "do" && while_kwd == "until" =>
+            {
+                let cond = match &cond[..] {
+                    [one] => one,
+                    _ => panic!("Got a cond for a do-while loop with length != 1: {:?}", vec),
+                };
+
+                Expr::RepeatUntil(
+                    Box::new(parse_block(body_block).unwrap()),
+                    Box::new(parse_expr(cond)),
+                )
+            }
+
+            // set!
+            // since this case is below the "let" case, we can match on rest
+            [Atom(S(id)), Atom(S(walrus)), rest @ ..] if walrus == ":=" => Expr::Set(
+                id_to_string(id),
+                Box::new(parse_expr(&unwrap_lexpr_list(rest))),
             ),
 
-            s => panic!("Invalid: Unknown vector expression {:?}", s),
+            // null
+            [Atom(S(null_kwd)), Atom(S(struct_name))] if null_kwd == "null" => {
+                Expr::Null(name_to_string(struct_name, NameType::StructName))
+            }
+
+            // new (alloc)
+            [Atom(S(new_kwd)), Atom(S(struct_name))] if new_kwd == "new" => {
+                Expr::Alloc(name_to_string(struct_name, NameType::StructName))
+            }
+
+            // lookup: <some things>.field_name
+            [first @ .., Atom(S(dot)), Atom(S(field_name))] if dot == "." => Expr::Lookup(
+                Box::new(parse_expr(&unwrap_lexpr_list(first))),
+                name_to_string(field_name, NameType::StructFieldName),
+            ),
+
+            // update: <some things>.field_name := ()
+            [first @ .., Atom(S(dot)), Atom(S(field_name)), Atom(S(walrus)), new_val]
+                if dot == "." && walrus == ":=" =>
+            {
+                Expr::Update(
+                    Box::new(parse_expr(&unwrap_lexpr_list(first))),
+                    name_to_string(field_name, NameType::StructFieldName),
+                    Box::new(parse_expr(new_val)),
+                )
+            }
+
+            _ => panic!("Invalid list: {:#?}", vec),
         },
-        s => panic!("Invalid: Unknown atomic expression {:?}", s),
+
+        // CurlyList: a block
+        CurlyList(exprns) => {
+            if exprns.len() == 0 {
+                panic!("Invalid: Empty block")
+            } else {
+                Expr::Block(
+                    exprns
+                        .into_iter()
+                        .map(|element| parse_expr(element))
+                        .collect(),
+                )
+            }
+        }
+
+        // ParenList: a sequence of lexprs which were wrapped in parens
+        // at this point, we only expect there to be one element-- these parens only exist for lexing / are additional parens
+        ParenList(vec) => {
+            if let [one] = &vec[..] {
+                parse_expr(one)
+            } else {
+                panic!("Invalid wrapping parens: {:?}.", vec)
+            }
+        }
     }
 }
 
-fn parse_struct_def(s: &Sexp) -> Option<UserStruct> {
-    // check if it could even be a struct defenition
+fn parse_block(lexpr: &Lexpr) -> Result<Expr, String> {
+    if let CurlyList(_stuff) = lexpr {
+        Ok(parse_expr(lexpr))
+    } else {
+        Err(format!(
+            "Tried to parse a block, but didn't find curly braces: {:?}",
+            lexpr
+        ))
+    }
+}
+
+fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, String) {
+    let name_and_type = match name_and_type {
+        List(_name_and_type) => _name_and_type,
+        _ => panic!(
+            "Invalid: Improperly formed type annotation {:?} in {:?}",
+            name_and_type, defn
+        ),
+    };
+
+    match &name_and_type[..] {
+        [Atom(S(field_name)), Atom(S(type_anotation)), Atom(S(field_type))]
+            if type_anotation == "::" =>
+        {
+            // Will check field isn't a duplicate in type-check
+            (
+                type_str_to_expr_type(field_type),
+                name_to_string(&field_name, NameType::StructFieldName), // panics if keyword
+            )
+        }
+        _ => panic!(
+            "Invalid: Improperly formed type annotation {:?} in {:?}",
+            name_and_type, defn
+        ),
+    }
+}
+
+fn parse_struct_def(s: &Lexpr) -> Option<UserStruct> {
     let decl = match s {
-        Sexp::List(declaration) => declaration,
+        List(declaration) => declaration,
         _ => return None,
     };
 
     let (struct_name, fields) = match &decl[..] {
-        [Sexp::Atom(S(s_keyword)), Sexp::Atom(S(s_name)), Sexp::List(_fields)]
-            if s_keyword == "struct" =>
-        {
-            (s_name, _fields)
+        [Atom(S(defn_type)), Atom(S(struct_name)), ParenList(fields)] if defn_type == "struct" => {
+            (struct_name, fields)
         }
         _ => return None,
     };
@@ -173,22 +264,7 @@ fn parse_struct_def(s: &Sexp) -> Option<UserStruct> {
 
     let mut fields_vec = Vec::new();
     for f in fields {
-        let name_and_type = match f {
-            Sexp::List(_name_and_type) => _name_and_type,
-            _ => panic!("Invalid: Malformed struct field {:?}", f),
-        };
-
-        let tup = match &name_and_type[..] {
-            [Sexp::Atom(S(field_name)), Sexp::Atom(S(field_type))] => {
-                // Will check field isn't a duplicate in type-check
-                (
-                    type_str_to_expr_type(field_type),
-                    name_to_string(&field_name, NameType::StructFieldName), // panics if keyword
-                )
-            },
-            _ => panic!("Invalid: Malformed struct field binding {:?}", f),
-        };
-        fields_vec.push(tup);
+        fields_vec.push(parse_type_annotated_name(s, f));
     }
 
     if fields_vec.is_empty() {
@@ -202,16 +278,16 @@ fn parse_struct_def(s: &Sexp) -> Option<UserStruct> {
     ))
 }
 
-fn parse_fn_def(s: &Sexp) -> Option<UserFunction> {
+fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
     // check if it could even be a function defenition
     let decl = match s {
-        Sexp::List(declaration) => declaration,
+        List(declaration) => declaration,
         _ => return None,
     };
 
     let (fun_name, params, ret_type, fun_body) = match &decl[..] {
-        [Sexp::Atom(S(fun_keyword)), Sexp::Atom(S(fun_name)), Sexp::List(params), Sexp::Atom(S(ret_type)), fun_body]
-            if fun_keyword == "fun" =>
+        [Atom(S(fun_keyword)), Atom(S(fun_name)), ParenList(params), Atom(S(type_annotation_kword)), Atom(S(ret_type)), fun_body]
+            if fun_keyword == "fun" && type_annotation_kword == "::" =>
         {
             (fun_name, params, ret_type, fun_body)
         }
@@ -229,37 +305,24 @@ fn parse_fn_def(s: &Sexp) -> Option<UserFunction> {
     // parse params
     let params_vec = params
         .into_iter()
-        .map(|param| {
-            let name_and_type = match param {
-                Sexp::List(_name_and_type) => _name_and_type,
-                _ => panic!("Invalid: Improperly formed parameter definition {:?}", s),
-            };
-
-            match &name_and_type[..] {
-                [Sexp::Atom(S(name)), Sexp::Atom(S(param_type))] => (
-                    type_str_to_expr_type(param_type),
-                    name_to_string(name, NameType::FunParam),
-                ),
-                _ => panic!("Invalid: Improperly formed parameter binding {:?}", s),
-            }
-        })
+        .map(|param| parse_type_annotated_name(s, param))
         .collect();
 
     Some(UserFunction::UserFun(
         fun_name,
         FunSignature::Sig(ret_type, params_vec),
-        parse_expr(fun_body),
+        parse_block(fun_body).unwrap(),
     ))
 }
 
-pub fn parse_program(s: &Sexp) -> Prog {
-    let decl_and_body = match s {
-        Sexp::List(decl_and_body) => decl_and_body,
-        _ => panic!("Invalid: Program is an atom expression {:?}", s),
+pub fn parse_program(lexpr: &Lexpr) -> Prog {
+    let decl_and_body = match lexpr {
+        Lexpr::List(decl_and_body) => decl_and_body,
+        _ => panic!("Invalid: Program is an atom expression {:?}", lexpr),
     };
 
-    let (expr, definitions) = match decl_and_body.split_last() {
-        Some((expr, definitions)) => (expr, definitions),
+    let (body, definitions) = match decl_and_body.split_last() {
+        Some((body, definitions)) => (body, definitions),
         None => panic!("Invalid: Malformed program"),
     };
 
@@ -282,8 +345,8 @@ pub fn parse_program(s: &Sexp) -> Prog {
         }
 
         // must be illegal!
-        panic!("Invalid: Improperly formed binding {:?}", s)
+        panic!("Invalid: Improperly formed defenition {:#?}", definition)
     }
 
-    Prog::Program(struct_defs, fn_defs, parse_expr(expr))
+    Prog::Program(struct_defs, fn_defs, parse_expr(body))
 }

@@ -70,7 +70,7 @@ fn run_success_test(name: &str, file: &Path, expected: &str, input: Option<&str>
     if let Err(err) = compile(name, file) {
         panic!("expected a successful compilation, but got an error: `{err}`");
     }
-    match run(name, input) {
+    match run(file, input) {
         Err(err) => {
             panic!("expected a successful execution, but got an error: `{err}`");
         }
@@ -84,7 +84,7 @@ fn run_runtime_error_test(name: &str, file: &Path, expected: &str, input: Option
     if let Err(err) = compile(name, file) {
         panic!("expected a successful compilation, but got an error: `{err}`");
     }
-    match run(name, input) {
+    match run(file, input) {
         Ok(out) => {
             panic!("expected a runtime error, but program executed succesfully: `{out}`");
         }
@@ -93,18 +93,18 @@ fn run_runtime_error_test(name: &str, file: &Path, expected: &str, input: Option
 }
 
 fn run_static_error_test(name: &str, file: &Path, expected: &str) {
-    match compile(name, file) {
+    match compile(name, &file) {
         Ok(()) => panic!("expected a failure, but compilation succeeded"),
         Err(err) => check_error_msg(&err, expected),
     }
 }
 
-fn compile(name: &str, file: &Path) -> Result<(), String> {
+fn compile(_name: &str, file: &Path) -> Result<(), String> {
     // Run the compiler
     let compiler: PathBuf = ["target", "debug", env!("CARGO_PKG_NAME")].iter().collect();
     let output = Command::new(&compiler)
         .arg(file)
-        .arg(&mk_path(name, Ext::Asm))
+        .arg(&mk_path(file, Ext::Asm))
         .output()
         .expect("could not run the compiler");
     if !output.status.success() {
@@ -113,7 +113,7 @@ fn compile(name: &str, file: &Path) -> Result<(), String> {
 
     // Assemble and link
     let output = Command::new("make")
-        .arg(&mk_path(name, Ext::Run))
+        .arg(&mk_path(file, Ext::Run))
         .output()
         .expect("could not run make");
     assert!(output.status.success(), "linking failed");
@@ -121,8 +121,8 @@ fn compile(name: &str, file: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn run(name: &str, input: Option<&str>) -> Result<String, String> {
-    let mut cmd = Command::new(&mk_path(name, Ext::Run));
+fn run(file: &Path, input: Option<&str>) -> Result<String, String> {
+    let mut cmd = Command::new(&mk_path(file, Ext::Run));
     if let Some(input) = input {
         cmd.arg(input);
     }
@@ -152,8 +152,41 @@ fn diff(expected: &str, actual_output: String) {
     }
 }
 
-fn mk_path(name: &str, ext: Ext) -> PathBuf {
-    Path::new("tests").join(format!("{name}.{ext}"))
+fn mk_path(file: &Path, ext: Ext) -> PathBuf {
+    let grandparent = match file.parent() {
+        Some(parent) => {
+            match parent.parent() {
+                Some(grandparent) => grandparent,
+                _ => panic!("Invalid Filename {:?}", file),
+            }
+        },
+        _ => panic!("Invalid Filename: {:?}", file),
+    };
+
+
+    let parent_str = match file.parent() {
+        Some(parent) => match parent.file_stem() {
+            Some(parent_dir) => match parent_dir.to_str() {
+                Some(parent_str) => parent_str,
+                _ => panic!("Invalid Filename: {:?}", file),
+            },
+            _ => panic!("Invalid Filename: {:?}", file),
+        },
+        _ => panic!("Invalid Filename: {:?}", file),
+    };
+
+    let file_str = match file.file_stem() {
+        Some(file) => match file.to_str() {
+            Some(file_str) => file_str,
+            _ => panic!("Invalid Filename: {:?}", file),
+        },
+        _ => panic!("Invalid Filename: {:?}", file),
+    };
+
+    match ext {
+        Ext::Run => grandparent.join(format!("{parent_str}")).join(format!("{file_str}.{ext}")),
+        Ext::Asm => grandparent.join(format!("lib{parent_str}")).join(format!("{file_str}.{ext}")),
+    }
 }
 
 #[derive(Copy, Clone)]

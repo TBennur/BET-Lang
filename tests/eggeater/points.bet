@@ -4,7 +4,7 @@ fun addPoint (p::point, q::point)::point {
   let (
     r:=(new point)
   ) { 
-    r.x := ((p.x) + (q.x));
+    r.x := ((p.x) + (q.x)); # Possible TODO: Convert to r.x := p.x + q.x
     r.y := ((p.y) + (q.y));
     r 
   }
@@ -26,11 +26,11 @@ let (
     t:=(addPoint(p, r)),
     u:=(addPoint(q, r))
   ) { 
-    print (s.x);
-    print (s.y);
-    print (t.x);
-    print (t.y);
-    print (u.x);
-    u.y
+    print (s.x); # 4
+    print (s.y); # 16
+    print (t.x); # 6
+    print (t.y); # 18
+    print (u.x); # 8
+    u.y # 20
   } 
 }
