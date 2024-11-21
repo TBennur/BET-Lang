@@ -1,3 +1,6 @@
+## Introduction
+Bet is a type-safe, memory-safe programming language created as part of CMU's 17-363: Programming Language Pragmatics
+
 ## Concrete Syntax
 
 Please note: the braces, `[]`, are currently not used for anything; they just serve to show what the `*` and `+` operators are being applied to, without being confused for parentheses
@@ -65,15 +68,10 @@ Please note: the braces, `[]`, are currently not used for anything; they just se
 <binding> := <identifier> := <expr>
 ```
 
-# Tests
-We wrote a transpiler to exhaustively test our new syntax. The transpile.py and transpile.rs files can rewrite any .snek 
-programs into their .bet counterparts. Updated versions of eggeater programs can be found in bet-samples. We have new 
-versions of the bst, factorial, fibonnaci points and simple_examples success files. We also have a few failure examples, 
-labeled as parse_*_fail.bet, to illustrate invalid syntax. 
-
+## Walkthrough
 We will now walk through the new bst syntax to illustrate our improvements.
 
-```
+```c
 struct bst (val::int, left::bst, right::bst); # C-like structure definitions
 
 fun newBST ()::bst { # C-like function syntax with type annotations

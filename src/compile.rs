@@ -3,7 +3,6 @@ use im::HashMap;
 use crate::consts::*;
 use crate::semantics::{struct_name_to_type_enum, struct_type_enum_to_name, STRUCT_NUM_TO_NAME};
 use crate::structs::*;
-use crate::typecheck::type_check_prog;
 
 /**
  * Helper Function
@@ -803,21 +802,20 @@ fn serialize_struct_layouts(
     res_vec.join(",")
 }
 
-pub fn compile_prog(p: &Prog) -> String {
-    let TypedProg::Program(body_type, struct_sigs, struct_layouts, typed_funs, typed_e) =
-        type_check_prog(p);
+pub fn compile_prog(tp: &TypedProg) -> String {
+    let TypedProg::Program(body_type, struct_sigs, struct_layouts, typed_funs, typed_e) = tp;
 
     let mut all_instrs = Vec::new();
 
     for typed_fun in typed_funs {
-        all_instrs.extend(compile_fn(&typed_fun, &struct_layouts));
+        all_instrs.extend(compile_fn(typed_fun, struct_layouts));
     }
 
     // compile program body, with the label __main
     let main = TypedFunction::Fun(
         MAIN_LABEL.to_string(),
-        FunSignature::Sig(body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
-        typed_e,
+        FunSignature::Sig(*body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
+        typed_e.clone(),
     );
     all_instrs.extend(compile_fn(&main, &struct_layouts));
 
@@ -825,12 +823,12 @@ pub fn compile_prog(p: &Prog) -> String {
     let entrypoint = TypedFunction::Fun(
         // (print (main input : int ) : body_type ) : body_type
         ENTRYPOINT_LABEL.to_string(),
-        FunSignature::Sig(body_type, Vec::new()), // unit -> body_type
+        FunSignature::Sig(*body_type, Vec::new()), // unit -> body_type
         TypedExpr::UnOp(
-            body_type,
+            *body_type,
             Op1::Print,
             Box::new(TypedExpr::Call(
-                body_type,
+                *body_type,
                 MAIN_LABEL.to_string(),
                 vec![TypedExpr::RDInput],
             )),
