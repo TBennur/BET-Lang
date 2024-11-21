@@ -40,6 +40,9 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::LXOR(dst, src) => format!("\txor {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::LOR(dst, src) => format!("\tor {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::LAND(dst, src) => format!("\tand {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
         Instr::AddLabel(label) => format!("{}:", label.to_string()),
@@ -148,6 +151,15 @@ fn compile_bin_op_to_instrs(
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
             instr_to_compute_res.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
         }
+        Op2::Or | Op2::And => {
+            instr_to_compute_res.push(match op {
+                Op2::Or => Instr::LOR,
+                Op2::And => Instr::LAND,
+                _ => panic!("Unexpected: This should never be called"),
+            }(
+                Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
+            ));
+        }
         _ => {
             instr_to_compute_res.push(Instr::Compare(
                 Val::Reg(Reg::RAX),
@@ -233,6 +245,7 @@ fn compile_expr_to_instrs(
             match op {
                 Op1::Add1 => instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1))),
                 Op1::Sub1 => instructions.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1))),
+                Op1::Not => instructions.push(Instr::LXOR(Val::Reg(Reg::RAX), Val::Imm(1))),
                 Op1::Print => {
                     let flag = type_to_flag(*t);
 

@@ -67,6 +67,7 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
 pub enum Op1 {
     Add1,
     Sub1,
+    Not,
     Print,
 }
 
@@ -76,6 +77,7 @@ impl fmt::Display for Op1 {
             Op1::Add1 => "add1",
             Op1::Sub1 => "sub1",
             Op1::Print => "print",
+            Op1::Not => "not",
         };
         write!(f, "{}", output)
     }
@@ -91,6 +93,8 @@ pub enum Op2 {
     GreaterEqual,
     Less,
     LessEqual,
+    Or,
+    And,
 }
 
 impl fmt::Display for Op2 {
@@ -99,6 +103,8 @@ impl fmt::Display for Op2 {
             Op2::Plus => "+",
             Op2::Minus => "-",
             Op2::Times => "*",
+            Op2::Or => "||",
+            Op2::And => "&&",
             Op2::Equal => "==",
             Op2::Greater => ">",
             Op2::GreaterEqual => ">=",
@@ -227,6 +233,9 @@ pub enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
+    LXOR(Val, Val),
+    LOR(Val, Val),
+    LAND(Val, Val),
     Compare(Val, Val),
     Call(FunctionLabel),
     AddLabel(String),

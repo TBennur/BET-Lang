@@ -10,7 +10,7 @@ fun fact(n::int)::int{
             }else{
                 acc
             }
-        } until (i >= n)
+        } until (!(i < n))
     }
 };
 

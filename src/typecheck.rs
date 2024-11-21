@@ -203,6 +203,10 @@ fn type_check_expr(
                 Op1::Print => {
                     TypedExpr::UnOp(extract_type(&typed_expr), *op1, Box::new(typed_expr))
                 }
+                Op1::Not => match extract_type(&typed_expr) {
+                    ExprType::Bool => TypedExpr::UnOp(ExprType::Bool, *op1, Box::new(typed_expr)),
+                    _ => panic!("Type mismatch in UnOp"),
+                }           
             }
         }
 
@@ -303,6 +307,38 @@ fn type_check_expr(
 
                 TypedExpr::BinOp(
                     ExprType::Int,
+                    *op2,
+                    Box::new(a_typed_exprn),
+                    Box::new(b_typed_exprn),
+                )
+            }
+
+            // bool * bool => bool
+            Op2::Or | Op2::And => {
+                let a_typed_exprn = type_check_expr(
+                    a,
+                    type_bindings.clone(),
+                    function_sigs.clone(),
+                    struct_sigs.clone(),
+                    allow_input,
+                );
+                if extract_type(&a_typed_exprn) != ExprType::Bool {
+                    panic!("Type mismatch: BinOp argument not an Bool");
+                } // Not changed, no subtyping for math [[EQ]]
+
+                let b_typed_exprn = type_check_expr(
+                    b,
+                    type_bindings.clone(),
+                    function_sigs.clone(),
+                    struct_sigs.clone(),
+                    allow_input,
+                );
+                if extract_type(&b_typed_exprn) != ExprType::Bool {
+                    panic!("Type mismatch: BinOp argument not an Bool");
+                } // Not changed, no subtyping for math [[EQ]]
+
+                TypedExpr::BinOp(
+                    ExprType::Bool,
                     *op2,
                     Box::new(a_typed_exprn),
                     Box::new(b_typed_exprn),

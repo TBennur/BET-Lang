@@ -734,6 +734,8 @@ success_tests! {
         file: "eggeater/bst.bet",
         expected:"4\n3\n7\n1\nnull pointer to struct bst\n5\n8"
     },
+    
+    // Final tests
     {
         name: final_basic_comment,
         file: "final/basic_comment.bet",
@@ -758,6 +760,91 @@ success_tests! {
         name: final_special_comment,
         file: "final/special_comment.bet",
         expected:"5"
+    },
+    {
+        name: final_not_true,
+        file: "final/not_true.bet",
+        expected:"false"
+    },
+    {
+        name: final_not_false,
+        file: "final/not_false.bet",
+        expected:"true"
+    },
+    {
+        name: final_not_composite,
+        file: "final/not_composite.bet",
+        expected:"true"
+    },
+    {
+        name: final_not_not,
+        file: "final/not_not.bet",
+        expected:"true"
+    },
+    {
+        name: final_or_tt,
+        file: "final/or_tt.bet",
+        expected:"true"
+    },
+    {
+        name: final_or_tf,
+        file: "final/or_tf.bet",
+        expected:"true"
+    },
+    {
+        name: final_or_ft,
+        file: "final/or_ft.bet",
+        expected:"true"
+    },
+    {
+        name: final_or_ff,
+        file: "final/or_ff.bet",
+        expected:"false"
+    },
+    {
+        name: final_or_composite,
+        file: "final/or_composite.bet",
+        expected:"true"
+    },
+    {
+        name: final_or_if,
+        file: "final/or_if.bet",
+        expected:"1"
+    },
+    {
+        name: final_and_tt,
+        file: "final/and_tt.bet",
+        expected:"true"
+    },
+    {
+        name: final_and_tf,
+        file: "final/and_tf.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_ft,
+        file: "final/and_ft.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_ff,
+        file: "final/and_ff.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_composite,
+        file: "final/and_composite.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_if,
+        file: "final/and_if.bet",
+        expected:"0"
+    },
+    {
+        name: final_de_morgans,
+        file: "final/de_morgans.bet",
+        expected:"true\ntrue\ntrue\ntrue"
     },
 }
 
@@ -1161,6 +1248,67 @@ static_error_tests! {
         name: cobra_invalid_loop_fail0,
         file: "cobra/invalid_loop_fail0.bet",
         expected: "Invalid",
-    }
-
+    },
+    
+    // Final
+    {
+        name: final_not_invalid,
+        file: "final/not_invalid.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_not_mismatch,
+        file: "final/not_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_or_invalid,
+        file: "final/or_invalid.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_or_invalid2,
+        file: "final/or_invalid2.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_left_or_mismatch,
+        file: "final/left_or_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_right_or_mismatch,
+        file: "final/right_or_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_both_or_mismatch,
+        file: "final/both_or_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_and_invalid,
+        file: "final/and_invalid.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_and_invalid2,
+        file: "final/and_invalid2.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_left_and_mismatch,
+        file: "final/left_and_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_right_and_mismatch,
+        file: "final/right_and_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_both_and_mismatch,
+        file: "final/both_and_mismatch.bet",
+        expected:"mismatch"
+    },
 }

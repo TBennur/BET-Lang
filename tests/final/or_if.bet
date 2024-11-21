@@ -1,0 +1,5 @@
+if (true || false) {
+  1
+} else {
+  0
+}
