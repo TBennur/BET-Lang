@@ -811,6 +811,41 @@ success_tests! {
         file: "final/or_if.bet",
         expected:"1"
     },
+    {
+        name: final_and_tt,
+        file: "final/and_tt.bet",
+        expected:"true"
+    },
+    {
+        name: final_and_tf,
+        file: "final/and_tf.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_ft,
+        file: "final/and_ft.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_ff,
+        file: "final/and_ff.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_composite,
+        file: "final/and_composite.bet",
+        expected:"false"
+    },
+    {
+        name: final_and_if,
+        file: "final/and_if.bet",
+        expected:"0"
+    },
+    {
+        name: final_de_morgans,
+        file: "final/de_morgans.bet",
+        expected:"true\ntrue\ntrue\ntrue"
+    },
 }
 
 runtime_error_tests! {
@@ -1249,6 +1284,31 @@ static_error_tests! {
     {
         name: final_both_or_mismatch,
         file: "final/both_or_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_and_invalid,
+        file: "final/and_invalid.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_and_invalid2,
+        file: "final/and_invalid2.bet",
+        expected:"Invalid"
+    },
+    {
+        name: final_left_and_mismatch,
+        file: "final/left_and_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_right_and_mismatch,
+        file: "final/right_and_mismatch.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_both_and_mismatch,
+        file: "final/both_and_mismatch.bet",
         expected:"mismatch"
     },
 }

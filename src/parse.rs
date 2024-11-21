@@ -127,6 +127,7 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
                     "<" => Op2::Less,
                     "<=" => Op2::LessEqual,
                     "||" => Op2::Or,
+                    "&&" => Op2::And,
                     s => panic!("Invalid: Unknown binary operation {:?}", s),
                 },
                 Box::new(parse_expr(lhs)),

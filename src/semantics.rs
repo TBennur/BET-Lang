@@ -29,7 +29,7 @@ pub static STICKY_UNOPS: Lazy<HashSet<&'static str>> =
 
 
 pub static BET_BINOPS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| HashSet::from(["==", ">=", "<=", "+", "-", "*", "<", ">", "||"]));
+    Lazy::new(|| HashSet::from(["==", ">=", "<=", "+", "-", "*", "<", ">", "||", "&&"]));
 
 static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     HashSet::from([

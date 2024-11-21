@@ -1,0 +1,36 @@
+# Test De Morgan's Laws for Boolean Pairs
+struct boolPair (p::bool, q::bool);
+
+# Factory for Boolean Pair
+fun newBoolPair(p::bool, q::bool)::boolPair {
+  let (
+    bp := new boolPair
+  ) {
+    bp.p := p;
+    bp.q := q;
+    bp
+  }
+};
+
+# Test Both of De Morgan's Laws
+fun deMorgans(bp::boolPair)::bool {
+  let (
+    andToOr := (!((bp.p) && (bp.q))) == ((!(bp.p)) || (!(bp.q))),
+    orToAnd := ((!((bp.p) || (bp.q))) == ((!(bp.p)) && (!(bp.q))))
+  ) {
+    andToOr && orToAnd
+  }
+};
+
+# Test over all true/false pairs
+let (
+  tt := newBoolPair(true, true),
+  tf := newBoolPair(true, false),
+  ft := newBoolPair(false, true),
+  ff := newBoolPair(false, false)
+) {
+  print (deMorgans(tt));
+  print (deMorgans(tf));
+  print (deMorgans(ff));
+  deMorgans(ff)
+}

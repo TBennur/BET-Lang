@@ -314,7 +314,7 @@ fn type_check_expr(
             }
 
             // bool * bool => bool
-            Op2::Or => {
+            Op2::Or | Op2::And => {
                 let a_typed_exprn = type_check_expr(
                     a,
                     type_bindings.clone(),
