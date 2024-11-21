@@ -734,6 +734,8 @@ success_tests! {
         file: "eggeater/bst.bet",
         expected:"4\n3\n7\n1\nnull pointer to struct bst\n5\n8"
     },
+    
+    // Final tests
     {
         name: final_basic_comment,
         file: "final/basic_comment.bet",
@@ -758,6 +760,26 @@ success_tests! {
         name: final_special_comment,
         file: "final/special_comment.bet",
         expected:"5"
+    },
+    {
+        name: final_not_true,
+        file: "final/not_true.bet",
+        expected:"false"
+    },
+    {
+        name: final_not_false,
+        file: "final/not_false.bet",
+        expected:"true"
+    },
+    {
+        name: final_not_composite,
+        file: "final/not_composite.bet",
+        expected:"true"
+    },
+    {
+        name: final_not_not,
+        file: "final/not_not.bet",
+        expected:"true"
     },
 }
 
@@ -1161,6 +1183,13 @@ static_error_tests! {
         name: cobra_invalid_loop_fail0,
         file: "cobra/invalid_loop_fail0.bet",
         expected: "Invalid",
-    }
+    },
+    
+    // Final
+    {
+        name: final_not_invalid,
+        file: "final/not_invalid.bet",
+        expected:"Invalid"
+    },
 
 }

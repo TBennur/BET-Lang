@@ -101,16 +101,19 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
                     "add1" => Op1::Add1,
                     "sub1" => Op1::Sub1,
                     "print" => Op1::Print,
+                    "!" => Op1::Not,
                     s => panic!("Invalid: Unknown unary operation {:?}", s),
                 },
                 Box::new(parse_expr(&unwrap_lexpr_list(rest))),
             ),
 
             // assume any vector whose first element isn't a keyword is a call
-            [Atom(S(fun_name)), ParenList(fun_args)] if !is_keyword(fun_name) => Expr::Call(
-                name_to_string(fun_name, NameType::FunName),
-                fun_args.into_iter().map(parse_expr).collect(),
-            ),
+            [Atom(S(fun_name)), ParenList(fun_args)] if !is_keyword(fun_name) => {
+                Expr::Call(
+                    name_to_string(fun_name, NameType::FunName),
+                    fun_args.into_iter().map(parse_expr).collect(),
+                )
+            },
 
             // binops
             [lhs, Atom(S(op2)), rhs] if BET_BINOPS.contains(&op2.as_str()) => Expr::BinOp(

@@ -203,6 +203,10 @@ fn type_check_expr(
                 Op1::Print => {
                     TypedExpr::UnOp(extract_type(&typed_expr), *op1, Box::new(typed_expr))
                 }
+                Op1::Not => match extract_type(&typed_expr) {
+                    ExprType::Bool => TypedExpr::UnOp(ExprType::Bool, *op1, Box::new(typed_expr)),
+                    _ => panic!("Type mismatch in UnOp"),
+                }           
             }
         }
 

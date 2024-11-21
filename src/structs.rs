@@ -67,6 +67,7 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
 pub enum Op1 {
     Add1,
     Sub1,
+    Not,
     Print,
 }
 
@@ -76,6 +77,7 @@ impl fmt::Display for Op1 {
             Op1::Add1 => "add1",
             Op1::Sub1 => "sub1",
             Op1::Print => "print",
+            Op1::Not => "not",
         };
         write!(f, "{}", output)
     }
@@ -227,6 +229,7 @@ pub enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
+    LXOR(Val, Val), // Negates the value at val
     Compare(Val, Val),
     Call(FunctionLabel),
     AddLabel(String),

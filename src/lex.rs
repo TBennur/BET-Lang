@@ -32,7 +32,7 @@ impl LexerConfig {
         Self {
             // unary operators stick to the next thing pushed-- the next string if a
             // non-empty string is pushed next, or the next list if a list is pushed next
-            unaryops: vec!['~'],
+            unaryops: vec!['~', '!'],
 
             // we split on operators, but they don't start a new list
             operators: vec![
@@ -303,6 +303,7 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
     if stack.len() != 0 {
         panic!("Invalid: open and closing don't match");
     }
+    // panic!("{:?}", state.context);
     state.split_partial_list();
     Lexpr::List(state.context)
 }

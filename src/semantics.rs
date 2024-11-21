@@ -22,7 +22,7 @@ pub static STRUCT_NAME_TO_NUM: Lazy<Mutex<HashMap<String, i32>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub static UNOPS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| HashSet::from(["print", "add1", "sub1"]));
+    Lazy::new(|| HashSet::from(["print", "add1", "sub1", "!"]));
 
 pub static STICKY_UNOPS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| HashSet::from(["~"]));
