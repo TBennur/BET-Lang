@@ -93,6 +93,7 @@ pub enum Op2 {
     GreaterEqual,
     Less,
     LessEqual,
+    Or,
 }
 
 impl fmt::Display for Op2 {
@@ -101,6 +102,7 @@ impl fmt::Display for Op2 {
             Op2::Plus => "+",
             Op2::Minus => "-",
             Op2::Times => "*",
+            Op2::Or => "||",
             Op2::Equal => "==",
             Op2::Greater => ">",
             Op2::GreaterEqual => ">=",
@@ -229,7 +231,8 @@ pub enum Instr {
     IAdd(Val, Val),
     ISub(Val, Val),
     IMul(Val, Val),
-    LXOR(Val, Val), // Negates the value at val
+    LXOR(Val, Val),
+    LOR(Val, Val),
     Compare(Val, Val),
     Call(FunctionLabel),
     AddLabel(String),

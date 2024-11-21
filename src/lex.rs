@@ -41,7 +41,7 @@ impl LexerConfig {
                 ">=", "<=", ":=", // let bindings or set
                 ".",  // update / access structs,
                 // ops
-                "+", "-", "*", "<", ">",
+                "+", "-", "*", "<", ">", "||"
             ],
             ignore: vec![' ', '\t', '\n'],
             open: vec!['(', '{'],

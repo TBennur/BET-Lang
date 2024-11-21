@@ -313,6 +313,38 @@ fn type_check_expr(
                 )
             }
 
+            // bool * bool => bool
+            Op2::Or => {
+                let a_typed_exprn = type_check_expr(
+                    a,
+                    type_bindings.clone(),
+                    function_sigs.clone(),
+                    struct_sigs.clone(),
+                    allow_input,
+                );
+                if extract_type(&a_typed_exprn) != ExprType::Bool {
+                    panic!("Type mismatch: BinOp argument not an Bool");
+                } // Not changed, no subtyping for math [[EQ]]
+
+                let b_typed_exprn = type_check_expr(
+                    b,
+                    type_bindings.clone(),
+                    function_sigs.clone(),
+                    struct_sigs.clone(),
+                    allow_input,
+                );
+                if extract_type(&b_typed_exprn) != ExprType::Bool {
+                    panic!("Type mismatch: BinOp argument not an Bool");
+                } // Not changed, no subtyping for math [[EQ]]
+
+                TypedExpr::BinOp(
+                    ExprType::Bool,
+                    *op2,
+                    Box::new(a_typed_exprn),
+                    Box::new(b_typed_exprn),
+                )
+            }
+
             // t * t => bool
             Op2::Equal => {
                 let a_typed_exprn = type_check_expr(

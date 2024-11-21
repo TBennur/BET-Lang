@@ -41,6 +41,7 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::LXOR(dst, src) => format!("\txor {}, {}", val_to_str(dst), val_to_str(src)),
+        Instr::LOR(dst, src) => format!("\tor {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
         Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
         Instr::AddLabel(label) => format!("{}:", label.to_string()),
@@ -148,6 +149,14 @@ fn compile_bin_op_to_instrs(
 
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
             instr_to_compute_res.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
+        }
+        Op2::Or => {
+            instr_to_compute_res.push(match op {
+                Op2::Or => Instr::LOR,
+                _ => panic!("Unexpected: This should never be called"),
+            }(
+                Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
+            ));
         }
         _ => {
             instr_to_compute_res.push(Instr::Compare(
