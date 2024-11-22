@@ -146,7 +146,6 @@ fn compile_bin_op_to_instrs(
                 Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset)
             ));
             // Do Overflow Checking
-
             instr_to_compute_res.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
             instr_to_compute_res.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
         }
@@ -242,8 +241,20 @@ fn compile_expr_to_instrs(
             );
 
             match op {
-                Op1::Add1 => instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1))),
-                Op1::Sub1 => instructions.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1))),
+                Op1::Add1 => {
+                    instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
+                    
+                    // Do Overflow Checking
+                    instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
+                    instructions.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
+                },
+                Op1::Sub1 => {
+                    instructions.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
+                    
+                    // Do Overflow Checking
+                    instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
+                    instructions.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
+                },
                 Op1::Not => instructions.push(Instr::LXOR(Val::Reg(Reg::RAX), Val::Imm(1))),
                 Op1::Print => {
                     let flag = type_to_flag(*t);

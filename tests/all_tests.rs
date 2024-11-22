@@ -849,12 +849,7 @@ success_tests! {
 }
 
 runtime_error_tests! {
-    {
-        name: cobra_mul_over,
-        file: "cobra/mul_over.bet",
-        expected: "overflow",
-    },
-    {
+   {
         name: cobra_too_negative_input,
         file: "cobra/just_input.bet",
         input: "-9223372036854775809",
@@ -1198,6 +1193,11 @@ static_error_tests! {
     },
 
     // Unbound identifier
+    {
+        name: cobra_mul_over,
+        file: "cobra/mul_over.bet",
+        expected: "overflow",
+    },
     {
         name: cobra_unbound_identifier_fail0,
         file: "cobra/unbound_identifier_fail0.bet",

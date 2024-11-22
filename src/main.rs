@@ -1,7 +1,7 @@
 mod compile;
 mod consts;
 mod lex;
-mod strip;
+mod optimize;
 mod parse;
 mod semantics;
 mod structs;
@@ -12,8 +12,9 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use lex::{lex, LexerConfig};
-use parse::parse_program;
+use parse::parse_prog;
 use typecheck::type_check_prog;
+use optimize::optimize_prog;
 use compile::compile_prog;
 
 fn main() -> std::io::Result<()> {
@@ -29,9 +30,10 @@ fn main() -> std::io::Result<()> {
     
     // construct program
     let bet_lexed = lex(&in_contents, LexerConfig::default());
-    let bet_prog = parse_program(&bet_lexed);
+    let bet_prog = parse_prog(&bet_lexed);
     let bet_typed = type_check_prog(&bet_prog);
-    let bet_compiled = compile_prog(&bet_typed);
+    let bet_optimized = optimize_prog(&bet_typed);
+    let bet_compiled = compile_prog(&bet_optimized);
 
     let mut out_file = File::create(out_name)?;
     out_file.write_all(bet_compiled.as_bytes())?;

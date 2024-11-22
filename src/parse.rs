@@ -320,7 +320,7 @@ fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
     ))
 }
 
-pub fn parse_program(lexpr: &Lexpr) -> Prog {
+pub fn parse_prog(lexpr: &Lexpr) -> Prog {
     let decl_and_body = match lexpr {
         Lexpr::List(decl_and_body) => decl_and_body,
         _ => panic!("Invalid: Program is an atom expression {:?}", lexpr),
