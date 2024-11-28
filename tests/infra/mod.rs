@@ -116,7 +116,7 @@ fn compile(_name: &str, file: &Path) -> Result<(), String> {
         .arg(&mk_path(file, Ext::Run))
         .output()
         .expect("could not run make");
-    assert!(output.status.success(), "linking failed");
+    assert!(output.status.success(), "linking failed: {}", String::from_utf8(output.stderr).unwrap());
 
     Ok(())
 }
@@ -137,7 +137,9 @@ fn run(file: &Path, input: Option<&str>) -> Result<String, String> {
 fn check_error_msg(found: &str, expected: &str) {
     assert!(
         found.contains(expected.trim()),
-        "the reported error message does not match",
+        "the reported error message does not match: [expected] {}; [found] {}",
+        expected,
+        found
     );
 }
 
@@ -154,15 +156,12 @@ fn diff(expected: &str, actual_output: String) {
 
 fn mk_path(file: &Path, ext: Ext) -> PathBuf {
     let grandparent = match file.parent() {
-        Some(parent) => {
-            match parent.parent() {
-                Some(grandparent) => grandparent,
-                _ => panic!("Invalid Filename {:?}", file),
-            }
+        Some(parent) => match parent.parent() {
+            Some(grandparent) => grandparent,
+            _ => panic!("Invalid Filename {:?}", file),
         },
         _ => panic!("Invalid Filename: {:?}", file),
     };
-
 
     let parent_str = match file.parent() {
         Some(parent) => match parent.file_stem() {
@@ -184,8 +183,12 @@ fn mk_path(file: &Path, ext: Ext) -> PathBuf {
     };
 
     match ext {
-        Ext::Run => grandparent.join(format!("{parent_str}")).join(format!("{file_str}.{ext}")),
-        Ext::Asm => grandparent.join(format!("lib{parent_str}")).join(format!("{file_str}.{ext}")),
+        Ext::Run => grandparent
+            .join(format!("{parent_str}"))
+            .join(format!("{file_str}.{ext}")),
+        Ext::Asm => grandparent
+            .join(format!("lib{parent_str}"))
+            .join(format!("{file_str}.{ext}")),
     }
 }
 
