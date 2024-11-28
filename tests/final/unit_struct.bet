@@ -1,0 +1,2 @@
+struct unit_struct(x::unit);
+let (x:= new unit_struct) {x.x}

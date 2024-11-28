@@ -1,0 +1,2 @@
+fun ret_unit()::unit{};
+ret_unit()

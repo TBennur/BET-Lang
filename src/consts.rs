@@ -16,3 +16,4 @@ pub const MAIN_LABEL: &str = "__snek_main";
 
 pub const BOOL_TYPE_FLAG: i32 = 0;
 pub const INT_TYPE_FLAG: i32 = 1;
+pub const UNIT_TYPE_FLAG: i32 = 2;

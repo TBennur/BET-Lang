@@ -12,6 +12,7 @@ pub fn type_to_flag(t: ExprType) -> i32 {
     match t {
         ExprType::Int => INT_TYPE_FLAG,
         ExprType::Bool => BOOL_TYPE_FLAG,
+        ExprType::Unit => UNIT_TYPE_FLAG,
         ExprType::StructPointer(i) => i,
     }
 }
@@ -243,18 +244,18 @@ fn compile_expr_to_instrs(
             match op {
                 Op1::Add1 => {
                     instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
-                    
+
                     // Do Overflow Checking
                     instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
                     instructions.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
-                },
+                }
                 Op1::Sub1 => {
                     instructions.push(Instr::ISub(Val::Reg(Reg::RAX), Val::Imm(1)));
-                    
+
                     // Do Overflow Checking
                     instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(1)));
                     instructions.push(Instr::JumpOverflow(String::from(ERROR_LABEL)));
-                },
+                }
                 Op1::Not => instructions.push(Instr::LXOR(Val::Reg(Reg::RAX), Val::Imm(1))),
                 Op1::Print => {
                     let flag = type_to_flag(*t);
@@ -569,6 +570,9 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
+                ExprType::Unit => panic!(
+                    "Unexpected: Attempted to create an Unit pointer. This should not happen"
+                ),
             };
             let size = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
@@ -607,6 +611,9 @@ fn compile_expr_to_instrs(
                 ExprType::Int => {
                     panic!("Unexpected: Attempted to access an Int pointer. This should not happen")
                 }
+                ExprType::Unit => panic!(
+                    "Unexpected: Attempted to access an Unit pointer. This should not happen"
+                ),
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
                     let res = num_to_name_map.get(&n);
@@ -676,6 +683,9 @@ fn compile_expr_to_instrs(
                 ExprType::Int => {
                     panic!("Unexpected: Attempted to access an Int pointer. This should not happen")
                 }
+                ExprType::Unit => panic!(
+                    "Unexpected: Attempted to access an Unit pointer. This should not happen"
+                ),
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
                     let res = num_to_name_map.get(&n);
@@ -719,6 +729,8 @@ fn compile_expr_to_instrs(
 
             instructions
         }
+
+        TypedExpr::Unit => vec![],
     }
 }
 
@@ -796,6 +808,7 @@ fn serialize_struct_layouts(
                 Some((expr_type, _field_name)) => match expr_type {
                     ExprType::Int => "int".to_string(),
                     ExprType::Bool => "bool".to_string(),
+                    ExprType::Unit => "unit".to_string(),
                     ExprType::StructPointer(struct_type_enum) => {
                         match struct_type_enum_to_name(*struct_type_enum) {
                             Some(s) => s,

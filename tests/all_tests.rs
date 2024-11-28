@@ -846,6 +846,36 @@ success_tests! {
         file: "final/de_morgans.bet",
         expected:"true\ntrue\ntrue\ntrue"
     },
+    {
+        name: final_unit_block,
+        file: "final/unit_block.bet",
+        expected: "unit"
+    },
+    {
+        name: final_unit_fn,
+        file: "final/unit_fn.bet",
+        expected: "unit"
+    },
+    {
+        name: final_unit_print,
+        file: "final/unit_print.bet",
+        expected: "1\nunit\n2\nunit\n3\nunit"
+    },
+    {
+        name: final_unit_struct,
+        file: "final/unit_struct.bet",
+        expected: "unit"
+    },
+    {
+        name: final_unit_long_block,
+        file: "final/unit_long_block.bet",
+        expected: "unit"
+    },
+    {
+        name: final_unit_let,
+        file: "final/unit_let.bet",
+        expected: "unit"
+    },
 }
 
 runtime_error_tests! {

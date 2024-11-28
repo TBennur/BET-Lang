@@ -11,6 +11,8 @@ pub enum ExprType {
     Bool,
     // new to egg-eater
     StructPointer(i32), // pointer to a struct, whose name is contained in STRUCT_NUM_TO_NAME[i32]
+    // new to bet
+    Unit,
 }
 
 impl fmt::Debug for ExprType {
@@ -24,6 +26,7 @@ impl fmt::Debug for ExprType {
                     None => write!(f, "Unrecognized StructPointer({})", struct_type_enum),
                 }
             }
+            ExprType::Unit => write!(f, "Unit"),
         }
     }
 }
@@ -58,6 +61,8 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         TypedExpr::Alloc(expr_type) => *expr_type,
         TypedExpr::Update(expr_type, _, _, _) => *expr_type,
         TypedExpr::Lookup(expr_type, _, _) => *expr_type,
+        // new to bet
+        TypedExpr::Unit => ExprType::Unit,
     }
 }
 
@@ -136,6 +141,7 @@ pub enum Expr {
     Alloc(String),
     Update(Box<Expr>, String, Box<Expr>),
     Lookup(Box<Expr>, String),
+    Unit, // TODO: do we want this to be an expression?
 }
 
 #[derive(Debug)]
@@ -176,6 +182,8 @@ pub enum TypedExpr {
     Alloc(ExprType),
     Update(ExprType, Box<TypedExpr>, String, Box<TypedExpr>),
     Lookup(ExprType, Box<TypedExpr>, String),
+    /* --- New to bet --- */
+    Unit,
 }
 
 pub enum TypedFunction {

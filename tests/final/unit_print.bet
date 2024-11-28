@@ -1,0 +1,8 @@
+fun ret_unit()::unit{};
+{
+    print(1);
+    print(ret_unit());
+    print(2);
+    print(());
+    print(3); # what is printed after 3 is the value of this block
+}

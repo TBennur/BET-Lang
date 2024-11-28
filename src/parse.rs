@@ -183,13 +183,15 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
                 )
             }
 
+            [] => Expr::Unit, // empty List is unit
+
             _ => panic!("Invalid list: {:#?}", vec),
         },
 
         // CurlyList: a block
         CurlyList(exprns) => {
             if exprns.len() == 0 {
-                panic!("Invalid: Empty block")
+                Expr::Unit
             } else {
                 Expr::Block(
                     exprns
@@ -201,12 +203,14 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
         }
 
         // ParenList: a sequence of lexprs which were wrapped in parens
-        // at this point, we only expect there to be one element-- these parens only exist for lexing / are additional parens
+        // at this point, we only expect there to be one element-- these parens only exist for lexing / are additional parens-- or none, which indicates unit
         ParenList(vec) => {
             if let [one] = &vec[..] {
                 parse_expr(one)
+            } else if let [] = &vec[..] {
+                Expr::Unit
             } else {
-                panic!("Invalid wrapping parens: {:?}.", vec)
+                panic!("Invalid parens: {:?}.", vec)
             }
         }
     }
@@ -308,10 +312,14 @@ fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
     let ret_type = type_str_to_expr_type(ret_type);
 
     // parse params
-    let params_vec = params
-        .into_iter()
-        .map(|param| parse_type_annotated_name(s, param))
-        .collect();
+    let params_vec = if *params == vec![Lexpr::List(vec![])] {
+        vec![(ExprType::Unit, "unit".to_string())]
+    } else {
+        params
+            .into_iter()
+            .map(|param| parse_type_annotated_name(s, param))
+            .collect()
+    };
 
     Some(UserFunction::UserFun(
         fun_name,

@@ -25,7 +25,10 @@ fn deserialize_structs(
         let struct_vec: Vec<&str> = subres_str.split(".").collect();
         if struct_vec.len() < 6 {
             // struct + struct_name + struct_enum + >= 1 field name + >= 1 field offset + >= 1 type
-            panic!("Invalid: illegal struct type serialization")
+            panic!(
+                "Invalid: illegal struct type serialization: {:?}",
+                struct_vec
+            )
         }
         let chunked: Vec<&[&str]> = struct_vec.chunks(3).collect();
         let (first, rest) = match chunked.split_first() {
@@ -84,6 +87,7 @@ pub extern "C" fn snek_error(error_flag: i64) {
 
 const IS_BOOL: u64 = 0;
 const IS_INT: u64 = 1;
+const IS_UNIT: u64 = 2;
 
 #[export_name = "\x01snek_print"]
 /// Changed snek_print to reflect the semantic meaning of print, which evaluates to the printed value
@@ -98,6 +102,8 @@ pub extern "C" fn snek_print(value: i64, type_flag: u64, msg: i64) -> i64 {
         }
     } else if type_flag == IS_INT {
         println!("{}", value);
+    } else if type_flag == IS_UNIT {
+        println!("unit");
     } else {
         // pointer to a struct
         match deserialize_structs(str_slice.to_string(), type_flag as i32) {

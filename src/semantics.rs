@@ -8,7 +8,8 @@ use std::{
     sync::Mutex,
 };
 
-static STRUCT_COUNTER: Mutex<i32> = Mutex::new(2);
+const NUM_LANG_TYPES: i32 = 3; // int, bool, unit
+static STRUCT_COUNTER: Mutex<i32> = Mutex::new(NUM_LANG_TYPES);
 /// Maps a struct enumeration number to the name of the corresponding struct type
 ///
 /// Can contain invalid structs (struct names which weren't declared) which will be detected at type-check
@@ -24,9 +25,7 @@ pub static STRUCT_NAME_TO_NUM: Lazy<Mutex<HashMap<String, i32>>> =
 pub static UNOPS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| HashSet::from(["print", "add1", "sub1", "!"]));
 
-pub static STICKY_UNOPS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| HashSet::from(["~"]));
-
+pub static STICKY_UNOPS: Lazy<HashSet<&'static str>> = Lazy::new(|| HashSet::from(["~"]));
 
 pub static BET_BINOPS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| HashSet::from(["==", ">=", "<=", "+", "-", "*", "<", ">", "||", "&&"]));
@@ -70,6 +69,8 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "alloc",  // (alloc <name>): evaluates to a pointer to a new struct of type <name>
         "update", // (update e1 <name> e2): updates field <name> to the value of <e2> of struct-pointer <e1>
         "lookup", // (lookup e <name>): evaluates to the value of field <name> which the struct-pointer <e> points to
+        /* --- New to bet --- */
+        "unit",
     ])
 });
 
@@ -152,6 +153,8 @@ pub fn type_str_to_expr_type(s: &String) -> ExprType {
         return ExprType::Int;
     } else if s == "bool" {
         return ExprType::Bool;
+    } else if s == "unit" {
+        return ExprType::Unit;
     }
 
     // we will assume that it's a pointer to a struct

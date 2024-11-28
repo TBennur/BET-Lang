@@ -57,6 +57,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
                 /* --- valid base types (struct fields can't be functions) --- */
                 ExprType::Int => ExprType::Int,
                 ExprType::Bool => ExprType::Bool,
+                ExprType::Unit => ExprType::Unit,
 
                 /* --- field with type pointer to struct... check that the struct it points to exists! --- */
                 ExprType::StructPointer(pointed_struct_enum) => {
@@ -206,7 +207,7 @@ fn type_check_expr(
                 Op1::Not => match extract_type(&typed_expr) {
                     ExprType::Bool => TypedExpr::UnOp(ExprType::Bool, *op1, Box::new(typed_expr)),
                     _ => panic!("Type mismatch in UnOp"),
-                }           
+                },
             }
         }
 
@@ -522,7 +523,11 @@ fn type_check_expr(
 
             // check that there's the correct number of arguments
             if param_types.len() != arguments.len() {
-                panic!("Invalid: Called function with wrong number of arguments")
+                panic!(
+                    "Invalid: Called function with wrong number of arguments; expected {:?}, got {:?}",
+                    param_types,
+                    arguments
+                )
             }
 
             // check that arguments are well typed, and agree with function sig
@@ -681,5 +686,6 @@ fn type_check_expr(
                 field_name.to_string(),
             )
         }
+        Expr::Unit => TypedExpr::Unit,
     }
 }

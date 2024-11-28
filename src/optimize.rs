@@ -192,6 +192,8 @@ fn optimize_expr(e: &TypedExpr) -> TypedExpr {
             TypedExpr::Update(*t, var.clone(), field.clone(), optimized_e)
         },
         TypedExpr::Lookup(t, var, field) => TypedExpr::Lookup(*t, var.clone(), field.clone()),
+        
+        TypedExpr::Unit => TypedExpr::Unit,
     }
 }
 

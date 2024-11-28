@@ -1,11 +1,11 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Atom {
     S(String),
     I(i64),
     F(f64),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Lexpr {
     Atom(Atom),
     List(Vec<Lexpr>),
@@ -39,7 +39,7 @@ impl LexerConfig {
                 ">=", "<=", ":=", // let bindings or set
                 ".",  // update / access structs,
                 // ops
-                "+", "-", "*", "<", ">", "||", "&&"
+                "+", "-", "*", "<", ">", "||", "&&",
             ],
             ignore: vec![' ', '\t', '\n'],
             open: vec!['(', '{'],
@@ -139,14 +139,15 @@ impl LexState {
         self.finding_operator = false;
     }
 
-    fn _split_partial_list(&mut self) {
-        if self.partial_list.len() == 0 {
+    fn _split_partial_list(&mut self, is_closing: bool) {
+        if is_closing && self.context.len() == 0 && self.partial_list.len() == 0 {
+            // so that {} => CurlyList([]), () => ParenList([])
             return;
         }
 
         let completed_list = std::mem::replace(&mut self.partial_list, Vec::new());
         let mut to_push = match completed_list.len() {
-            0 => unreachable!(),
+            0 => Lexpr::List(vec![]), // allow for unit type in blocks
             1 => completed_list.into_iter().next().unwrap(),
             _ => Lexpr::List(completed_list),
         };
@@ -165,9 +166,9 @@ impl LexState {
     }
 
     /// Add the current list, if it's non-empty, unwrapping it if needed
-    fn split_partial_list(&mut self) {
+    fn split_partial_list(&mut self, is_closing: bool) {
         self.split_partial_str();
-        self._split_partial_list();
+        self._split_partial_list(is_closing);
     }
 
     fn encounter_unary_op(&mut self, uop: char) {
@@ -240,7 +241,7 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
                 }
 
                 // we have a valid closing
-                state.split_partial_list();
+                state.split_partial_list(true);
 
                 // pop from previous closures, adding this closure to its partial_list
                 match stack.pop() {
@@ -251,7 +252,7 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
                             assert!(vec.len() > 0);
                             panic!("Had unary ops which weren't bound: {:?}", vec)
                         }
-                        
+
                         assert!(state.partial_str.len() == 0);
                         state.partial_list.push(match conf.open[closing_index] {
                             '{' => Lexpr::CurlyList(old_state.context),
@@ -272,7 +273,7 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
                 }
 
                 // delimiter matches; split off the partial_string, then the partial_list
-                state.split_partial_list();
+                state.split_partial_list(false);
             }
 
             ch if conf.is_unary_op(ch) => {
@@ -317,6 +318,6 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
         panic!("Invalid: open and closing don't match");
     }
     // panic!("{:?}", state.context);
-    state.split_partial_list();
+    state.split_partial_list(true); // implicitly the entire str is wrapped in {}
     Lexpr::List(state.context)
 }
