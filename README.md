@@ -155,7 +155,7 @@ fun addTree (tree::bst, newVal::int)::bst {
 let (
   x:=(null bst)
 ) { 
-  x := (addTree(x, 4)); # Use () wrappers to force a value and rmeove parsing ambiguity
+  x := (addTree(x, 4)); # Use () wrappers to force a value and remove parsing ambiguity
   print x;
   print x.left;
   print x.right;

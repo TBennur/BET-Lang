@@ -107,13 +107,18 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
                 Box::new(parse_expr(&unwrap_lexpr_list(rest))),
             ),
 
-            // assume any vector whose first element isn't a keyword is a call
-            [Atom(S(fun_name)), ParenList(fun_args)] if !is_keyword(fun_name) => {
+            // assume any vector in the form <wrapped_expr>(paren_list) is a function call
+            [fn_name_or_ptr, ParenList(fun_args)] if is_wrapped_expr_non_kword(fn_name_or_ptr) => {
                 Expr::Call(
-                    name_to_string(fun_name, NameType::FunName),
+                    Box::new(match fn_name_or_ptr {
+                        Atom(S(fun_name)) => {
+                            Expr::FunName(name_to_string(fun_name, NameType::FunName))
+                        }
+                        lexpr => parse_expr(lexpr),
+                    }),
                     fun_args.into_iter().map(parse_expr).collect(),
                 )
-            },
+            }
 
             // binops
             [lhs, Atom(S(op2)), rhs] if BET_BINOPS.contains(&op2.as_str()) => Expr::BinOp(
@@ -227,6 +232,30 @@ fn parse_block(lexpr: &Lexpr) -> Result<Expr, String> {
     }
 }
 
+/// Parses a slice of Lexrp into an ExprType
+///
+/// Handles:
+/// - base types: `unit`, `int`, `bool`
+/// - structs
+/// - function pointers
+fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
+    match type_annotation {
+        [Atom(S(single_type))] => single_type_str_to_expr_type(single_type),
+
+        [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if arrow == "->" => {
+            let parsed_arg_types = arg_types
+                .into_iter()
+                .map(std::slice::from_ref)
+                .map(parse_type)
+                .collect();
+            let parsed_ret_type: ExprType = parse_type(ret_type);
+            ExprType::FunctionPointer(parsed_arg_types, Box::new(parsed_ret_type))
+        }
+
+        _ => panic!("Invalid type annotation: {:?}", type_annotation),
+    }
+}
+
 fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, String) {
     let name_and_type = match name_and_type {
         List(_name_and_type) => _name_and_type,
@@ -237,15 +266,18 @@ fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, 
     };
 
     match &name_and_type[..] {
-        [Atom(S(field_name)), Atom(S(type_anotation)), Atom(S(field_type))]
+        // single type
+        [Atom(S(field_name)), Atom(S(type_anotation)), field_type @ ..]
             if type_anotation == "::" =>
         {
             // Will check field isn't a duplicate in type-check
             (
-                type_str_to_expr_type(field_type),
+                parse_type(field_type),
                 name_to_string(&field_name, NameType::StructFieldName), // panics if keyword
             )
         }
+
+        // function pointer type
         _ => panic!(
             "Invalid: Improperly formed type annotation {:?} in {:?}",
             name_and_type, defn
@@ -269,7 +301,7 @@ fn parse_struct_def(s: &Lexpr) -> Option<UserStruct> {
     // from here on, we know it must be a struct declaration; so panics instead of None
 
     // create a unique type enumeration for the struct, if it doesn't yet exist
-    type_str_to_expr_type(struct_name);
+    single_type_str_to_expr_type(struct_name);
 
     let mut fields_vec = Vec::new();
     for f in fields {
@@ -295,7 +327,7 @@ fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
     };
 
     let (fun_name, params, ret_type, fun_body) = match &decl[..] {
-        [Atom(S(fun_keyword)), Atom(S(fun_name)), ParenList(params), Atom(S(type_annotation_kword)), Atom(S(ret_type)), fun_body]
+        [Atom(S(fun_keyword)), Atom(S(fun_name)), ParenList(params), Atom(S(type_annotation_kword)), ret_type @ .., fun_body]
             if fun_keyword == "fun" && type_annotation_kword == "::" =>
         {
             (fun_name, params, ret_type, fun_body)
@@ -303,23 +335,19 @@ fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
         _ => return None,
     };
 
+    // get return type
+    let ret_type = parse_type(ret_type);
+
     // from here on, we know it must be a function declaration; so panics instead of None
 
     // check name (panics if keyword)
     let fun_name = name_to_string(fun_name, NameType::FunName);
 
-    // get return type
-    let ret_type = type_str_to_expr_type(ret_type);
-
     // parse params
-    let params_vec = if *params == vec![Lexpr::List(vec![])] {
-        vec![(ExprType::Unit, "unit".to_string())]
-    } else {
-        params
-            .into_iter()
-            .map(|param| parse_type_annotated_name(s, param))
-            .collect()
-    };
+    let params_vec = params
+        .into_iter()
+        .map(|param| parse_type_annotated_name(s, param))
+        .collect();
 
     Some(UserFunction::UserFun(
         fun_name,
@@ -362,4 +390,13 @@ pub fn parse_prog(lexpr: &Lexpr) -> Prog {
     }
 
     Prog::Program(struct_defs, fn_defs, parse_expr(body))
+}
+
+fn is_wrapped_expr_non_kword(lexpr: &Lexpr) -> bool {
+    match lexpr {
+        Atom(S(s)) => !is_keyword(s),
+        CurlyList(_) => true,
+        ParenList(_) => true,
+        _ => false,
+    }
 }

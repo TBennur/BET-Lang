@@ -876,6 +876,11 @@ success_tests! {
         file: "final/unit_let.bet",
         expected: "unit"
     },
+    {
+        name: final_unit_call,
+        file: "final/unit_call.bet",
+        expected: "unit"
+    },
 }
 
 runtime_error_tests! {

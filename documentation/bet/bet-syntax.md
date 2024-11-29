@@ -38,7 +38,7 @@ Please note: the braces, `[]`, are currently not used for anything; they just se
   | true
   | false
   | input
-  | <identifier>
+  | <identifier> // function name or variable
 
   // already wrapped in curly braces
   | block

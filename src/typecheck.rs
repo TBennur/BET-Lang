@@ -10,7 +10,7 @@ fn struct_sig_type_of(struct_sig: &StructSignature, field_name: &String) -> Opti
     let StructSignature::Sig(field_names) = struct_sig;
     for (field_type, name) in field_names {
         if name == field_name {
-            return Some(*field_type);
+            return Some(field_type.clone());
         }
     }
     None
@@ -54,11 +54,6 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
             }
             i += 1;
             let checked_field_type = match field_type {
-                /* --- valid base types (struct fields can't be functions) --- */
-                ExprType::Int => ExprType::Int,
-                ExprType::Bool => ExprType::Bool,
-                ExprType::Unit => ExprType::Unit,
-
                 /* --- field with type pointer to struct... check that the struct it points to exists! --- */
                 ExprType::StructPointer(pointed_struct_enum) => {
                     match struct_type_enum_to_name(*pointed_struct_enum) {
@@ -74,6 +69,10 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
                         }
                     }
                 }
+
+                // if not struct, clone
+                // includes base types (int, bool, unit) and function pointers
+                texpr => texpr.clone(),
             };
 
             checked_struct_fields.push((checked_field_type, field_name.to_string()));
@@ -107,7 +106,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
         for (param_type, param_name) in param_types {
             match type_bindings.get(param_name) {
                 Some(_) => panic!("Duplicate Argument"),
-                None => type_bindings.insert(param_name.to_string(), *param_type),
+                None => type_bindings.insert(param_name.to_string(), param_type.clone()),
             };
         }
 
@@ -182,9 +181,26 @@ fn type_check_expr(
 
         Expr::Boolean(b) => TypedExpr::Boolean(*b),
 
-        Expr::Id(id) => match type_bindings.get(id) {
-            None => panic!("Invalid: Unbound variable identifier {}", id),
-            Some(t) => TypedExpr::Id(*t, id.clone()),
+        Expr::Id(id) => match function_sigs.get(id) {
+            // first, check for function names (which resolve to function pointers)
+            Some(FunSignature::Sig(ret_type, param_types)) => {
+                TypedExpr::FunName(
+                    ExprType::FunctionPointer(
+                        param_types
+                            .into_iter()
+                            .map(|(field_type, _field_name)| field_type.to_owned())
+                            .collect(),
+                        Box::new(ret_type.clone()),
+                    ),
+                    id.to_string(),
+                )
+            }
+
+            // next, check for variables
+            None => match type_bindings.get(id) {
+                None => panic!("Invalid: Unbound variable identifier {}", id),
+                Some(t) => TypedExpr::Id(t.clone(), id.clone()),
+            },
         },
         Expr::Number(n) => TypedExpr::Number(*n),
 
@@ -213,10 +229,11 @@ fn type_check_expr(
 
         Expr::Set(name, new_value) => {
             // fails if the name isn't in scope
-            let t1 = *match type_bindings.get(name) {
+            let t1 = match type_bindings.get(name) {
                 Some(t1) => t1,
                 None => panic!("Invalid: Unbound variable identifier {}", name),
-            };
+            }
+            .clone();
 
             // can only "set" a variable to the same type within the current scope
             let t1_prime = type_check_expr(
@@ -509,33 +526,33 @@ fn type_check_expr(
 
             TypedExpr::Block(final_type, block_typed_exprn)
         }
-        Expr::Call(fun_name, arguments) => {
-            // check that function exists
-            let fun_sig = match function_sigs.get(fun_name) {
-                Some(fun_sig) => fun_sig,
-                None => panic!(
-                    "Invalid: Called function {:?}, which doesn't exist",
-                    fun_name
+        Expr::Call(fn_name_or_ptr, arguments) => {
+            // get the [unnamed parameter] function signature
+            let typed_name_or_ptr = type_check_expr(
+                fn_name_or_ptr,
+                type_bindings.clone(),
+                function_sigs.clone(),
+                struct_sigs.clone(),
+                allow_input,
+            );
+
+            // confirm that the expression type is indeed function pointer
+            let extracted_type = extract_type(&typed_name_or_ptr);
+            let (param_types, ret_type) = match extracted_type {
+                ExprType::FunctionPointer(arg_types, ret_type) => (arg_types, ret_type),
+                _ => panic!(
+                    "Invalid Call: {:?} is not a function pointer type [in {:?}]",
+                    extracted_type, typed_name_or_ptr
                 ),
             };
 
-            let FunSignature::Sig(return_type, param_types) = fun_sig;
-
-            // check that there's the correct number of arguments
-            if param_types.len() != arguments.len() {
-                panic!(
-                    "Invalid: Called function with wrong number of arguments; expected {:?}, got {:?}",
-                    param_types,
-                    arguments
-                )
-            }
+            let param_types: Vec<&ExprType> = param_types.iter().collect();
 
             // check that arguments are well typed, and agree with function sig
-            let zipped: Vec<(&Expr, &(ExprType, String))> =
-                arguments.iter().zip(param_types.iter()).collect();
+            let zipped: Vec<(&Expr, &ExprType)> = arguments.iter().zip(param_types).collect();
 
             let mut typed_args = Vec::new();
-            for (arg_exp, (expected_type, _)) in zipped {
+            for (arg_exp, expected_type) in zipped {
                 let arg_typed = type_check_expr(
                     arg_exp,
                     type_bindings.clone(),
@@ -551,7 +568,7 @@ fn type_check_expr(
             }
 
             // Check function
-            TypedExpr::Call(*return_type, fun_name.to_string(), typed_args)
+            TypedExpr::Call(*ret_type, Box::new(typed_name_or_ptr), typed_args)
         }
 
         Expr::Null(struct_name) => {
@@ -687,5 +704,65 @@ fn type_check_expr(
             )
         }
         Expr::Unit => TypedExpr::Unit,
+        Expr::FunName(fun_name) => match function_sigs.get(fun_name) {
+            // check global functions first
+            Some(FunSignature::Sig(return_type, param_types)) => {
+                let param_types: Vec<ExprType> = param_types
+                    .into_iter()
+                    .map(|(param_type, _param_name)| param_type.to_owned())
+                    .collect();
+
+
+                TypedExpr::FunName(
+                    ExprType::FunctionPointer(param_types, Box::new(return_type.clone())),
+                    fun_name.to_string(),
+                )
+            }
+            None => {
+                // variables next
+                match type_bindings.get(fun_name) {
+                    Some(ExprType::FunctionPointer(arg_types, ret_type)) => {
+                        TypedExpr::Id(ExprType::FunctionPointer(arg_types.to_owned(), ret_type.to_owned()),
+                        fun_name.to_string()
+                    )
+                    }
+                    _ => panic!(
+                        "Invalid: Called function {:?}, which doesn't exist",
+                        fun_name
+                    ),
+                }
+            }
+        }
+
+        // Expr::FunName(fun_name) => {
+        //     let (return_type, param_types) = match function_sigs.get(fun_name) {
+        //         // check global functions first
+        //         Some(FunSignature::Sig(return_type, param_types)) => {
+        //             let param_types: Vec<ExprType> = param_types
+        //                 .into_iter()
+        //                 .map(|(param_type, _param_name)| param_type.to_owned())
+        //                 .collect();
+
+        //             (return_type, param_types)
+        //         }
+        //         None => {
+        //             // variables next
+        //             match type_bindings.get(fun_name) {
+        //                 Some(ExprType::FunctionPointer(arg_types, ret_type)) => {
+        //                     (&**ret_type, arg_types.to_owned())
+        //                 }
+        //                 _ => panic!(
+        //                     "Invalid: Called function {:?}, which doesn't exist",
+        //                     fun_name
+        //                 ),
+        //             }
+        //         }
+        //     };
+
+        //     TypedExpr::FunName(
+        //         ExprType::FunctionPointer(param_types, Box::new(return_type.clone())),
+        //         fun_name.to_string(),
+        //     )
+        // }
     }
 }

@@ -14,6 +14,7 @@ pub fn type_to_flag(t: ExprType) -> i32 {
         ExprType::Bool => BOOL_TYPE_FLAG,
         ExprType::Unit => UNIT_TYPE_FLAG,
         ExprType::StructPointer(i) => i,
+        ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
     }
 }
 
@@ -55,6 +56,7 @@ fn instr_to_str(i: &Instr) -> String {
         Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
         Instr::Ret => "\tret".to_string(),
         Instr::Lea(dst, src) => format!("\tlea {}, [rel {}]", val_to_str(dst), val_to_str(src)),
+        Instr::Align(alignment) => format!("align {}", alignment),
     }
 }
 
@@ -63,6 +65,7 @@ fn fn_to_str(f: &FunctionLabel) -> String {
         FunctionLabel::SnekPrint => "snek_print".to_string(),
         FunctionLabel::SnekError => "snek_error".to_string(),
         FunctionLabel::Custom(name) => name.to_string(),
+        FunctionLabel::Pointer(reg) => format!("[{}]", reg_to_str(reg)),
     }
 }
 
@@ -258,7 +261,7 @@ fn compile_expr_to_instrs(
                 }
                 Op1::Not => instructions.push(Instr::LXOR(Val::Reg(Reg::RAX), Val::Imm(1))),
                 Op1::Print => {
-                    let flag = type_to_flag(*t);
+                    let flag = type_to_flag(t.clone());
 
                     instructions.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
                     instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
@@ -496,7 +499,7 @@ fn compile_expr_to_instrs(
             instructions_to_compile_repeat_until
         }
 
-        TypedExpr::Call(_ret_type, fun_name, args) => {
+        TypedExpr::Call(_ret_type, fun_name_or_ptr, args) => {
             /*
             foo(a, b) =>
             |    a        | <-- RSP + 16
@@ -504,8 +507,47 @@ fn compile_expr_to_instrs(
             | return addr | <-- RSP
             */
 
+            let (fun_label, is_in_rax) = match **fun_name_or_ptr {
+                // immediate names go as strings
+                TypedExpr::FunName(_, ref fun_name) => {
+                    (FunctionLabel::Custom(fun_name.to_owned()), false)
+                }
+
+                // pointers should be compiled into rax
+                ref texpr => {
+                    if let ExprType::FunctionPointer(_, _) = extract_type(texpr) {
+                        (FunctionLabel::Pointer(Reg::RAX), true)
+                    } else {
+                        unreachable!("already typechecks")
+                    }
+                }
+            };
+
             let mut instructions = Vec::new();
             let mut curr_rsp_offset = rsp_offset;
+
+            let ptr_rsp_offset = if is_in_rax {
+                // compile function pointer
+                instructions.extend(compile_expr_to_instrs(
+                    &fun_name_or_ptr,
+                    scope_bindings.clone(),
+                    struct_layouts,
+                    curr_rsp_offset,
+                    label_counter,
+                    label_name,
+                ));
+
+                // push pointer onto stack
+                curr_rsp_offset -= SIZEOF_I_64;
+                instructions.push(Instr::IMov(
+                    Val::RegOffset(Reg::RSP, curr_rsp_offset),
+                    Val::Reg(Reg::RAX),
+                ));
+
+                curr_rsp_offset
+            } else {
+                -1
+            };
 
             // what rsp would be after pushing args
             let unadjusted_call_rsp = rsp_offset - (SIZEOF_I_64 * args.len() as i32);
@@ -534,6 +576,18 @@ fn compile_expr_to_instrs(
                 ));
             }
 
+            if is_in_rax {
+                // move function pointer address, stored on the stack, into RAX
+                instructions.push(Instr::IMov(
+                    Val::Reg(Reg::RAX),
+                    Val::RegOffset(Reg::RSP, ptr_rsp_offset),
+                ));
+
+                instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
+                instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
+                instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+            }
+
             // update RSP for the function call
             instructions.push(Instr::IAdd(
                 Val::Reg(Reg::RSP),
@@ -541,7 +595,7 @@ fn compile_expr_to_instrs(
             )); // Reset Alignment
 
             // call the function
-            instructions.push(Instr::Call(FunctionLabel::Custom(fun_name.to_string())));
+            instructions.push(Instr::Call(fun_label));
 
             instructions.push(Instr::ISub(
                 Val::Reg(Reg::RSP),
@@ -573,6 +627,7 @@ fn compile_expr_to_instrs(
                 ExprType::Unit => panic!(
                     "Unexpected: Attempted to create an Unit pointer. This should not happen"
                 ),
+                ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
             };
             let size = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
@@ -624,6 +679,7 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
+                ExprType::FunctionPointer(_arg_type, _ret_type) => todo!(),
             };
             let offset = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
@@ -696,6 +752,7 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
+                ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
             };
             let offset = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
@@ -731,6 +788,12 @@ fn compile_expr_to_instrs(
         }
 
         TypedExpr::Unit => vec![],
+
+        TypedExpr::FunName(_expr_type, name) => {
+            vec![
+                Instr::Lea(Val::Reg(Reg::RAX), Val::Global(name.to_owned())),
+            ]
+        }
     }
 }
 
@@ -738,9 +801,12 @@ fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>)
     let TypedFunction::Fun(fun_name, FunSignature::Sig(_ret_type, args), typed_body) = f;
 
     // add the label for our code
-    let mut instrs = vec![Instr::AddLabel(fun_name.to_string())];
+    let mut instrs = vec![
+        Instr::Align(8), // to use as function pointers
+        Instr::AddLabel(fun_name.to_string()),
+    ];
 
-    if fun_name.clone() == ENTRYPOINT_LABEL {
+    if fun_name == ENTRYPOINT_LABEL {
         instrs.push(Instr::IMov(Val::Reg(Reg::RBX), Val::Imm(0)))
     }
 
@@ -815,6 +881,7 @@ fn serialize_struct_layouts(
                             None => unreachable!(),
                         }
                     }
+                    ExprType::FunctionPointer(_arg_type, _ret_type) => todo!(),
                 },
                 None => unreachable!(),
             });
@@ -838,7 +905,10 @@ pub fn compile_prog(tp: &TypedProg) -> String {
     // compile program body, with the label __main
     let main = TypedFunction::Fun(
         MAIN_LABEL.to_string(),
-        FunSignature::Sig(*body_type, vec![(ExprType::Int, "input".to_string())]), // input: int -> body_type
+        FunSignature::Sig(
+            body_type.clone(),
+            vec![(ExprType::Int, "input".to_string())],
+        ), // input: int -> body_type
         typed_e.clone(),
     );
     all_instrs.extend(compile_fn(&main, &struct_layouts));
@@ -847,13 +917,16 @@ pub fn compile_prog(tp: &TypedProg) -> String {
     let entrypoint = TypedFunction::Fun(
         // (print (main input : int ) : body_type ) : body_type
         ENTRYPOINT_LABEL.to_string(),
-        FunSignature::Sig(*body_type, Vec::new()), // unit -> body_type
+        FunSignature::Sig(body_type.clone(), Vec::new()), // unit -> body_type
         TypedExpr::UnOp(
-            *body_type,
+            body_type.clone(),
             Op1::Print,
             Box::new(TypedExpr::Call(
-                *body_type,
-                MAIN_LABEL.to_string(),
+                body_type.clone(),
+                Box::new(TypedExpr::FunName(
+                    body_type.clone(), // TODO
+                    MAIN_LABEL.to_string(),
+                )),
                 vec![TypedExpr::RDInput],
             )),
         ),

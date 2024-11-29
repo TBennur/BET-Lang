@@ -1,0 +1,13 @@
+fun ret_true()::bool{true};
+
+fun ret_ret_true()::()->bool{
+    ret_true
+};
+
+fun call_no_arg(x::()->()->bool)::bool{
+    (x())()
+};
+
+let(x := ret_ret_true) {
+    call_no_arg(x)
+}

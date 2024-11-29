@@ -34,6 +34,7 @@ impl LexerConfig {
 
             // we split on operators, but they don't start a new list
             operators: vec![
+                "->",
                 "::", // type annotation
                 "==", // strict equality
                 ">=", "<=", ":=", // let bindings or set
