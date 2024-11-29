@@ -121,7 +121,7 @@ pub fn type_check_prog(p: &Prog) -> TypedProg {
 
         // compare to signature type
         if extract_type(&type_checked_body) != *ret_type {
-            panic!("mismatched function signature & body");
+            panic!("mismatched function signature & body: [ret type] {:?}; [body] {:?}", ret_type, type_checked_body);
         }
 
         let typed_function = TypedFunction::Fun(

@@ -1,0 +1,10 @@
+fun add_int(x::int, y::int)::int{
+    x + y
+};
+
+struct math_op_container(op::(int, int)->int);
+
+let (x := new math_op_container) {
+    x.op := add_int;
+    (x.op)((x.op)(1,2), 3) # 1 + 2 + 3 = 6
+}

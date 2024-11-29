@@ -65,7 +65,7 @@ fn fn_to_str(f: &FunctionLabel) -> String {
         FunctionLabel::SnekPrint => "snek_print".to_string(),
         FunctionLabel::SnekError => "snek_error".to_string(),
         FunctionLabel::Custom(name) => name.to_string(),
-        FunctionLabel::Pointer(reg) => format!("[{}]", reg_to_str(reg)),
+        FunctionLabel::Pointer(reg) => reg_to_str(reg),
     }
 }
 
@@ -550,7 +550,7 @@ fn compile_expr_to_instrs(
             };
 
             // what rsp would be after pushing args
-            let unadjusted_call_rsp = rsp_offset - (SIZEOF_I_64 * args.len() as i32);
+            let unadjusted_call_rsp = curr_rsp_offset - (SIZEOF_I_64 * args.len() as i32);
 
             // preemptively adjust rsp so that it will 8 byte aligned, mod 16, after pushing args
             curr_rsp_offset +=
@@ -627,7 +627,9 @@ fn compile_expr_to_instrs(
                 ExprType::Unit => panic!(
                     "Unexpected: Attempted to create an Unit pointer. This should not happen"
                 ),
-                ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
+                ExprType::FunctionPointer(_arg_types, _ret_type) => {
+                    panic!("Unexpected: Attempted to create an Function pointer pointer. This should not happen")
+                }
             };
             let size = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
@@ -679,7 +681,8 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
-                ExprType::FunctionPointer(_arg_type, _ret_type) => todo!(),
+                ExprType::FunctionPointer(_arg_type, _ret_type) => 
+                    panic!("Unexpected: Attempted to access a Function pointer pointer. This should not happen"),
             };
             let offset = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
@@ -752,7 +755,9 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
-                ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
+                ExprType::FunctionPointer(_arg_types, _ret_type) => panic!(
+                    "Unexpected: Attempted to access an Function pointer pointer. This should not happen"
+                ),
             };
             let offset = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
@@ -790,9 +795,7 @@ fn compile_expr_to_instrs(
         TypedExpr::Unit => vec![],
 
         TypedExpr::FunName(_expr_type, name) => {
-            vec![
-                Instr::Lea(Val::Reg(Reg::RAX), Val::Global(name.to_owned())),
-            ]
+            vec![Instr::Lea(Val::Reg(Reg::RAX), Val::Global(name.to_owned()))]
         }
     }
 }
@@ -881,7 +884,7 @@ fn serialize_struct_layouts(
                             None => unreachable!(),
                         }
                     }
-                    ExprType::FunctionPointer(_arg_type, _ret_type) => todo!(),
+                    ExprType::FunctionPointer(_arg_type, _ret_type) => "todo!()".to_string(), // todo!()
                 },
                 None => unreachable!(),
             });
