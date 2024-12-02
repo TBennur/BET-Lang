@@ -150,8 +150,10 @@ fn optimize_expr(e: &TypedExpr) -> TypedExpr {
         TypedExpr::RepeatUntil(t, body, cond) => {
             let optimized_body = Box::new(optimize_expr(body));
             let optimized_cond = Box::new(optimize_expr(cond));
-
-            TypedExpr::RepeatUntil(t.clone(), optimized_body, optimized_cond)
+            match *optimized_cond {
+                TypedExpr::Boolean(true) => *optimized_body,
+                _ => TypedExpr::RepeatUntil(t.clone(), optimized_body, optimized_cond),
+            }
         }
         TypedExpr::Set(t, var, e) => {
             let optimized_e = Box::new(optimize_expr(e));
@@ -176,23 +178,17 @@ fn optimize_expr(e: &TypedExpr) -> TypedExpr {
 
             TypedExpr::Call(t.clone(), s.clone(), optimized_args)
         }
-        TypedExpr::Input => TypedExpr::Input,
-        TypedExpr::RDInput => TypedExpr::RDInput,
-        TypedExpr::Null(t) => TypedExpr::Null(t.clone()),
-        TypedExpr::Alloc(t) => TypedExpr::Alloc(t.clone()),
-        TypedExpr::Update(t, var, field, e) => {
-            let optimized_e = Box::new(optimize_expr(e));
-
-            TypedExpr::Update(t.clone(), var.clone(), field.clone(), optimized_e)
-        }
+        TypedExpr::Update(t, var, field, e) => TypedExpr::Update(
+            t.clone(),
+            Box::new(optimize_expr(var)),
+            field.clone(),
+            Box::new(optimize_expr(e)),
+        ),
         TypedExpr::Lookup(t, var, field) => {
-            TypedExpr::Lookup(t.clone(), var.clone(), field.clone())
+            TypedExpr::Lookup(t.clone(), Box::new(optimize_expr(var)), field.clone())
         }
 
-        TypedExpr::Unit => TypedExpr::Unit,
-        TypedExpr::FunName(fun_sig, fun_name) => {
-            TypedExpr::FunName(fun_sig.clone(), fun_name.clone())
-        }
+        t_e => t_e.clone(),
     }
 }
 
