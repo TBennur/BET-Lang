@@ -161,12 +161,12 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
                 Box::new(parse_expr(&unwrap_lexpr_list(rest))),
             ),
 
-            // null
+            // null TODO SUPPORT ARR AND FUN PTRS
             [Atom(S(null_kwd)), Atom(S(struct_name))] if null_kwd == "null" => {
                 Expr::Null(name_to_string(struct_name, NameType::StructName))
             }
 
-            // new (alloc)
+            // new (alloc) TODO SUPPORT ARR AND FUN PTRS
             [Atom(S(new_kwd)), Atom(S(struct_name))] if new_kwd == "new" => {
                 Expr::Alloc(name_to_string(struct_name, NameType::StructName))
             }
@@ -190,6 +190,9 @@ fn parse_expr(lexpr: &Lexpr) -> Expr {
 
             [] => Expr::Unit, // empty List is unit
 
+            // TODO ARR LOOKUP AND UPDATE WITH []
+            // - null check
+            // - length check
             _ => panic!("Invalid list: {:#?}", vec),
         },
 
@@ -240,8 +243,10 @@ fn parse_block(lexpr: &Lexpr) -> Result<Expr, String> {
 /// - function pointers
 fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
     match type_annotation {
+        // struct, base type
         [Atom(S(single_type))] => single_type_str_to_expr_type(single_type),
 
+        // function type
         [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if arrow == "->" => {
             let parsed_arg_types = arg_types
                 .into_iter()
@@ -277,7 +282,6 @@ fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, 
             )
         }
 
-        // function pointer type
         _ => panic!(
             "Invalid: Improperly formed type annotation {:?} in {:?}",
             name_and_type, defn
@@ -300,7 +304,7 @@ fn parse_struct_def(s: &Lexpr) -> Option<UserStruct> {
 
     // from here on, we know it must be a struct declaration; so panics instead of None
 
-    // create a unique type enumeration for the struct, if it doesn't yet exist
+    // create a unique type enumeration for the struct, if it doesn't yet exist, panic if keyword
     single_type_str_to_expr_type(struct_name);
 
     let mut fields_vec = Vec::new();

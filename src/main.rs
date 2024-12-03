@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     let bet_lexed = lex(&in_contents, LexerConfig::default());
     let bet_prog = parse_prog(&bet_lexed);
     // println!("{:?}", bet_prog);
-    let bet_typed = type_check_prog(&bet_prog);
+    let bet_typed = bet_prog.typecheck();
     let bet_optimized = optimize_prog(&bet_typed);
     let bet_compiled = compile_prog(&bet_optimized);
 

@@ -47,6 +47,7 @@ pub enum StructSignature {
 }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {
+    // TODO CLONE
     match t {
         TypedExpr::Number(_) => ExprType::Int,
         TypedExpr::RDInput => ExprType::Int,
