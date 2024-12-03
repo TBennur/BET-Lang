@@ -1,3 +1,5 @@
+# demonstrates assigning and referencing a function pointer to a struct field
+
 fun add_int(x::int, y::int)::int{
     x + y
 };

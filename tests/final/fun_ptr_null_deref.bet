@@ -1,0 +1,11 @@
+# produces a null pointer deref by calling a null function pointer
+
+struct has_fun_ptr(fn::()->bool);
+
+fun ret_true()::bool {
+    true
+};
+
+let (x := new has_fun_ptr){
+    (x.fn)()
+}

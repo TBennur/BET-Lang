@@ -881,6 +881,22 @@ success_tests! {
         file: "final/unit_call.bet",
         expected: "unit"
     },
+    //// function pointer tests
+    {
+        name: final_fun_ptr_unit_sig,
+        file: "final/fun_ptr_unit.bet",
+        expected: "1\n2\n3\nunit"
+    },
+    {
+        name: final_fun_ptr_int_sig,
+        file: "final/fun_ptr_int.bet",
+        expected: "true\n1\n2\ntrue\nfalse\n1\n2\nfalse\n3\n3"
+    },
+    {
+        name: final_fun_ptr_struct,
+        file: "final/fun_ptr_struct.bet",
+        expected: "6"
+    },
 }
 
 runtime_error_tests! {
@@ -936,6 +952,12 @@ runtime_error_tests! {
     {
         name: eggeater_lookup_null_fail,
         file: "eggeater/lookup_null_fail.bet",
+        expected: "null dereference",
+    },
+    //// trying to call a null-function pointer at runtime results in a runtime error
+    {
+        name: final_fun_ptr_null_fail,
+        file: "final/fun_ptr_null_deref.bet",
         expected: "null dereference",
     },
 }
