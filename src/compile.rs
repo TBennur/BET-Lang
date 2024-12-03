@@ -724,11 +724,14 @@ fn compile_expr_to_instrs(
             instructions.push(Instr::IMov(
                 Val::Reg(Reg::RDI),
                 Val::RegOffset(Reg::RSP, cur_rsp_offset),
-            ));
+            )); // RDI now holds new value of field
+
             instructions.push(Instr::IMov(
                 Val::RegOffset(Reg::RAX, SIZEOF_I_64 * offset),
                 Val::Reg(Reg::RDI),
             ));
+
+            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI)));
 
             instructions
         }

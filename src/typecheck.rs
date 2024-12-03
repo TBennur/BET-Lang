@@ -463,7 +463,7 @@ impl Expr {
                 let expected_type = match struct_sig_type_of(struct_sig, &field_name) {
                 Some(expr_type) => expr_type,
                 None => panic!("Invalid: Lookup nonexistent field {field_name} in struct {pointed_struct_name}"),
-            };
+                };
 
                 TypedExpr::Lookup(expected_type, Box::new(pointer_typed_expr), field_name)
             }
@@ -627,7 +627,8 @@ impl Prog {
 
         let typed_functions = functions
             .into_iter()
-            .map(|f| f.typecheck(struct_type_map.clone(), function_sigs.clone())).collect();
+            .map(|f| f.typecheck(struct_type_map.clone(), function_sigs.clone()))
+            .collect();
 
         /* --- Check that no functions have the same name as any struct --- */
 
