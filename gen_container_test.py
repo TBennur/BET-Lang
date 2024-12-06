@@ -21,6 +21,6 @@ if __name__ == "__main__":
 
     num_assignments = DEFAULT
     if len(sys.argv) > 1:
-        num_assignments = sys.argv[1]
+        num_assignments = int(sys.argv[1])
 
     print(container_test(num_assignments))

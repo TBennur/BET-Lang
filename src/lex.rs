@@ -13,6 +13,12 @@ pub enum Lexpr {
     ParenList(Vec<Lexpr>),
 }
 
+impl Default for Lexpr {
+    fn default() -> Self {
+        Lexpr::List(vec![])
+    }
+}
+
 pub struct LexerConfig {
     unaryops: Vec<char>,
     operators: Vec<&'static str>,

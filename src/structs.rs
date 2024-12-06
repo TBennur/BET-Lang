@@ -128,7 +128,7 @@ impl fmt::Display for Op2 {
 
 /* --- Parsed, not Type-checked --- */
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Number(i32),
     Boolean(bool),
