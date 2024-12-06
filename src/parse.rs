@@ -2,8 +2,6 @@ use crate::lex;
 use crate::semantics::*;
 use crate::structs::*;
 use core::panic;
-use std::usize;
-
 use lex::Atom::{F, I, S};
 use lex::Lexpr;
 use lex::Lexpr::{Atom, CurlyList, List, ParenList};
@@ -19,25 +17,31 @@ fn package_lexr_vec(mut s: Vec<Lexpr>) -> Lexpr {
 }
 
 fn extract_binding(lexpr: Lexpr) -> Result<(String, Lexpr), String> {
-    let tokens = match lexpr {
+    let mut tokens = match lexpr {
         List(tokens) => tokens,
         _ => panic!("Bindings must be a List of tokens, {:?}", lexpr),
     };
 
-    if tokens.len() < 2 {
+    if tokens.len() < 3 {
+        // need at least vec!["id", ":=", lexpr]
         panic!("Bad binding, {:?}", tokens)
     }
-    let mut iter = tokens.into_iter();
-    let id = iter.next().unwrap();
-    let walrus = iter.next().unwrap();
-    let rest = iter.collect();
+
+    let (id, walrus) = {
+        let mut drained = tokens.drain(0..=1);
+        let id = drained.next().unwrap();
+        let walrus = drained.next().unwrap();
+        (id, walrus)
+        // drop drain
+    };
+
     match (id, walrus) {
         (Atom(S(id)), Atom(S(walrus))) if walrus == ":=" => {
-            Ok((id_to_string(&id), package_lexr_vec(rest)))
+            Ok((id_to_string(&id), package_lexr_vec(tokens)))
         }
         (id, walrus) => Err(format!(
             "Not a valid binding: {:?}, {:?}, {:?}",
-            id, walrus, rest
+            id, walrus, tokens
         )),
     }
 }
@@ -73,11 +77,11 @@ impl ParserState {
         mut unparsed: Vec<Lexpr>,
         constructor: impl FnOnce(Vec<Expr>) -> Expr + 'static,
     ) -> ParserState {
+        unparsed.reverse(); // so that popping still scans Left to Right
+
         if unparsed.is_empty() {
             panic!("expected non-zero parsing to do")
         }
-
-        unparsed.reverse(); // so that popping still scans Left to Right
 
         ParserState {
             unparsed,
@@ -155,9 +159,7 @@ impl IterativeParser {
 
     pub fn parse_lexpr(&mut self, lexpr: Lexpr) -> Expr {
         let mut currently_parsing = lexpr;
-        let mut i: usize  = 0;
         loop {
-            i+= 1;
             let parse_subres = match currently_parsing {
                 // atoms
                 Atom(I(n)) => match <i32>::try_from(n) {
@@ -237,8 +239,9 @@ impl IterativeParser {
                     }
 
                     // alphanum unops
-                    [Atom(S(op1)), rest @ ..] if UNOPS.contains(op1.as_str()) => {
-                        let rest: Vec<_> = rest.iter_mut().map(|x| std::mem::take(x)).collect();
+                    [Atom(S(op1)), _, ..] if UNOPS.contains(op1.as_str()) => {
+                        // std::mem::take(op1); // now it shows as Lexpr::Stolen in list_contents
+                        // let rest: Vec<_> = rest.iter_mut().map(|x| std::mem::take(x)).collect();
                         let uop_type = match op1.as_str() {
                             "add1" => Op1::Add1,
                             "sub1" => Op1::Sub1,
@@ -247,8 +250,9 @@ impl IterativeParser {
                             s => panic!("Invalid: Unknown unary operation {:?}", s),
                         };
 
+                        list_contents.remove(0); // drop op1
                         self.push_state(ParserState::new(
-                            vec![package_lexr_vec(rest)],
+                            vec![package_lexr_vec(list_contents)],
                             move |mut parsed| {
                                 if parsed.len() != 1 {
                                     unreachable!(
@@ -354,11 +358,21 @@ impl IterativeParser {
 
                     // set!
                     // since this case is below the "let" case, we can match on rest
-                    [Atom(S(id)), Atom(S(walrus)), rest @ ..] if walrus == ":=" => {
-                        let id = id_to_string(id);
-                        let rest: Vec<_> = rest.iter_mut().map(|x| std::mem::take(x)).collect();
+                    [Atom(S(_id)), Atom(S(walrus)), _, ..] if walrus == ":=" => {
+                        // modify list_contents so that it contains only what we need to parse next
+                        let id = {
+                            let mut drain = list_contents.drain(0..=1);
+                            let id = drain.next().unwrap();
+                            drain.next().unwrap();
+                            match id {
+                                Atom(S(id)) => id,
+                                _ => unreachable!(),
+                            }
+                        };
+
+                        let id = id_to_string(&id);
                         self.push_state(ParserState::new(
-                            vec![package_lexr_vec(rest)],
+                            vec![package_lexr_vec(list_contents)],
                             |mut parsed| {
                                 if parsed.len() == 1 {
                                     let parsed_new_val = parsed.pop().unwrap();
@@ -385,13 +399,24 @@ impl IterativeParser {
                         ))),
 
                     // lookup: <some things>.field_name
-                    [first @ .., Atom(S(dot)), Atom(S(field_name))] if dot == "." => {
+                    [.., _, Atom(S(dot)), Atom(S(_field_name))] if dot == "." => {
+                        let field_name = {
+                            let field_name = match list_contents.pop().unwrap() {
+                                Atom(S(field_name)) => field_name,
+                                _ => unreachable!(),
+                            }; // remove field name
+
+                            let dot = match list_contents.pop().unwrap() {
+                                Atom(S(dot)) => dot,
+                                _ => unreachable!(),
+                            }; // remove & drop dot
+                            assert_eq!(dot, ".");
+
+                            field_name // keep field_name
+                        };
                         
-                        let field_name = std::mem::take(field_name);
-                        let first: Vec<_> = first.iter_mut().map(|x| std::mem::take(x)).collect();
                         self.push_state(ParserState::new(
-                             vec![package_lexr_vec(first)],
-                            // vec![package_lexr_vec(first)],
+                            vec![package_lexr_vec(list_contents)],
                             move |mut parsed| {
                                 if parsed.len() == 1 {
                                     let parsed_val = parsed.pop().unwrap();
@@ -407,14 +432,31 @@ impl IterativeParser {
                     }
 
                     // update: <some things>.field_name := ()
-                    [first @ .., Atom(S(dot)), Atom(S(field_name)), Atom(S(walrus)), new_val]
+                    [.., _, Atom(S(dot)), Atom(S(_field_name)), Atom(S(walrus)), _new_val]
                         if dot == "." && walrus == ":=" =>
                     {
-                        let first: Vec<_> = first.iter_mut().map(|x| std::mem::take(x)).collect();
-                        let field_name = std::mem::take(field_name);
-                        let new_val = std::mem::take(new_val);
+                        // extract field_name, new_val, drop walrus, dot
+                        let (field_name, new_val) = {
+                            // drain contains (dot, field_name, walrus, new_val)
+                            let mut drain = list_contents.drain(list_contents.len() - 4..);
+                            match drain.next().unwrap() {
+                                Atom(S(dot)) => assert_eq!(dot, "."),
+                                _ => unreachable!(),
+                            };
+                            let field_name = match drain.next().unwrap() {
+                                Atom(S(field_name)) => field_name,
+                                _ => unreachable!(),
+                            };
+                            match drain.next().unwrap() {
+                                Atom(S(walrus)) => assert_eq!(walrus, ":="),
+                                _ => unreachable!(),
+                            };
+                            let new_val = drain.next().unwrap();
+                            (field_name, new_val)
+                        };
+
                         self.push_state(ParserState::new(
-                            vec![package_lexr_vec(first), new_val],
+                            vec![package_lexr_vec(list_contents), new_val],
                             move |mut parsed| {
                                 if parsed.len() == 2 {
                                     let parsed_new_val = parsed.pop().unwrap();
@@ -457,6 +499,7 @@ impl IterativeParser {
                         std::cmp::Ordering::Greater => panic!("Invalid parens: {:?}.", vec),
                     }
                 }
+                Lexpr::Stolen => unreachable!(), // stolen should be filtered by ParseState::new()
             };
             match parse_subres {
                 ParseRetval::Done(res) => return res,

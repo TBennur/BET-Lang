@@ -17,6 +17,7 @@ use optimize::optimize_prog;
 use parse::parse_prog;
 
 fn main() -> std::io::Result<()> {
+    let mut start = std::time::Instant::now();
     let args: Vec<String> = env::args().collect();
 
     let in_name = &args[1];
@@ -28,10 +29,17 @@ fn main() -> std::io::Result<()> {
     in_file.read_to_string(&mut in_contents)?;
 
     // construct program
+    println!("read in {}", start.elapsed().as_millis());
+    start = std::time::Instant::now();
+
     let mut bet_lexed = lex(&in_contents, LexerConfig::default());
-    println!("lexed");
+    println!("lexed in {}", start.elapsed().as_millis());
+    start = std::time::Instant::now();
+
     let bet_prog = parse_prog(&mut bet_lexed);
-    println!("parsed");
+    println!("parsed in {}", start.elapsed().as_millis());
+    // start = std::time::Instant::now();
+
     // println!("{:?}", bet_prog);
     let bet_typed = bet_prog.typecheck();
     println!("typed");

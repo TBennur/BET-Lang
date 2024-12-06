@@ -11,11 +11,12 @@ pub enum Lexpr {
     List(Vec<Lexpr>),
     CurlyList(Vec<Lexpr>),
     ParenList(Vec<Lexpr>),
+    Stolen, // special fake lexpr which the parser creates when taking
 }
 
 impl Default for Lexpr {
     fn default() -> Self {
-        Lexpr::List(vec![])
+        Lexpr::Stolen
     }
 }
 
@@ -91,6 +92,15 @@ impl LexerConfig {
     fn is_unary_op(&self, ch: char) -> bool {
         self.unaryops.contains(&ch)
     }
+
+    fn is_comment_open(&self, ch: char) -> bool {
+        self.comment_open == ch
+    }
+
+    fn is_comment_close(&self, ch: char) -> bool {
+        self.comment_closing == ch
+    }
+
 }
 
 struct LexState {
@@ -100,6 +110,7 @@ struct LexState {
     partial_list: Vec<Lexpr>, // the list which composes the current list, such as
     partial_str: String,
     finding_operator: bool,
+    in_comment: bool,
 }
 
 fn atom_from(s: String) -> Atom {
@@ -122,6 +133,7 @@ impl LexState {
             partial_list: Vec::new(),
             partial_str: "".to_string(),
             finding_operator: false,
+            in_comment: false
         }
     }
 
@@ -152,10 +164,10 @@ impl LexState {
             return;
         }
 
-        let completed_list = std::mem::replace(&mut self.partial_list, Vec::new());
+        let mut completed_list = std::mem::replace(&mut self.partial_list, Vec::new());
         let mut to_push = match completed_list.len() {
             0 => Lexpr::List(vec![]), // allow for unit type in blocks
-            1 => completed_list.into_iter().next().unwrap(),
+            1 => completed_list.pop().unwrap(),
             _ => Lexpr::List(completed_list),
         };
 
@@ -185,21 +197,6 @@ impl LexState {
         };
     }
 }
-// Strips comments
-pub fn strip(s: &String, comment_open: char, comment_closing: char) -> String {
-    let mut is_comment = false;
-    let mut stripped_prog = String::new();
-    for (_i, ch) in s.char_indices() {
-        if ch == comment_open {
-            is_comment = true;
-        } else if is_comment && (ch == comment_closing) {
-            is_comment = false;
-        } else if !is_comment {
-            stripped_prog.push(ch)
-        }
-    }
-    stripped_prog
-}
 
 fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
     match v.iter().position(|eprime| *eprime == e) {
@@ -209,23 +206,35 @@ fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
 }
 
 fn is_prefix_of_any(prefix: &String, vec: &Vec<&str>) -> bool {
-    vec.iter().any(|s| s.starts_with(prefix))
+    vec.iter().any(|s: &&str| s.starts_with(prefix))
 }
 
 pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
-    let s_stripped = strip(s, conf.comment_open, conf.comment_closing);
     let mut stack: Vec<LexState> = Vec::new(); // tuple of index which the context belongs to, and the context
     let mut state = LexState::new(None);
-    for (i, ch) in s_stripped.char_indices() {
+    for (i, ch) in s.char_indices() {
+        if state.in_comment {
+            if conf.is_comment_close(ch) {
+                state.in_comment = false;
+            }
+            continue;
+        }
+
         match ch {
             ch if conf.is_ignore(ch) => {
                 state.split_partial_str();
+            }
+
+            ch if conf.is_comment_open(ch) => {
+                state.in_comment = true;
+                continue;
             }
 
             ch if conf.is_open(ch) => {
                 state.split_partial_str();
 
                 // push old context
+                assert!(!state.in_comment);
                 stack.push(state);
 
                 // make new context
@@ -291,13 +300,12 @@ pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
             ch if ch.is_ascii() => {
                 // if we were looking for an operator, check if we can continue building an operator with the current char (always prefer longer operators)
                 if state.finding_operator {
-                    let mut op_so_far = state.partial_str.to_string();
-                    op_so_far.push(ch);
-                    if conf.is_potential_operator(&op_so_far) {
-                        // continue building
-                        state.partial_str.push(ch);
+                    state.partial_str.push(ch);
+                    if conf.is_potential_operator(&state.partial_str) {
+                        // continue building operator
                         continue;
                     }
+                    state.partial_str.pop().unwrap(); // undo push
                     // give up on building operator; split off partial string
                     state.split_partial_str();
                     // fallthrough to process ch
