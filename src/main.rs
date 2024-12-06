@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use compile::compile_prog;
-use lex::{lex, LexerConfig};
+use lex::Lexer;
 use optimize::optimize_prog;
 use parse::parse_prog;
 
@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     println!("read in {}", start.elapsed().as_millis());
     start = std::time::Instant::now();
 
-    let mut bet_lexed = lex(&in_contents, LexerConfig::default());
+    let mut bet_lexed = Lexer::default().lex(&in_contents);
     println!("lexed in {}", start.elapsed().as_millis());
     start = std::time::Instant::now();
 
