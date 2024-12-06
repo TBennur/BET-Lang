@@ -388,9 +388,9 @@ impl IterativeParser {
                     [first @ .., Atom(S(dot)), Atom(S(field_name))] if dot == "." => {
                         
                         let field_name = std::mem::take(field_name);
-                        // let first: Vec<_> = first.iter_mut().map(|x| std::mem::take(x)).collect();
+                        let first: Vec<_> = first.iter_mut().map(|x| std::mem::take(x)).collect();
                         self.push_state(ParserState::new(
-                            list_contents,
+                             vec![package_lexr_vec(first)],
                             // vec![package_lexr_vec(first)],
                             move |mut parsed| {
                                 if parsed.len() == 1 {
