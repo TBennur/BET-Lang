@@ -66,11 +66,11 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         /* --- New to eggeater --- */
         "struct", // struct *<name type>: used to declare a new struct type
         "null",   // e: ... | null: a universal pointer type, which can be a pointer to any type
-        "alloc",  // (alloc <name>): evaluates to a pointer to a new struct of type <name>
-        "update", // (update e1 <name> e2): updates field <name> to the value of <e2> of struct-pointer <e1>
-        "lookup", // (lookup e <name>): evaluates to the value of field <name> which the struct-pointer <e> points to
+        "new",  // (new <name>): evaluates to a pointer to a new struct of type <name>
         /* --- New to bet --- */
         "unit",
+        "->",
+        "new_vec", // new_vec(type, size)
     ])
 });
 

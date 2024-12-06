@@ -14,6 +14,7 @@ pub enum ExprType {
     // new to bet
     Unit,
     FunctionPointer(Vec<ExprType>, Box<ExprType>), // arg types, then ret type
+    Array(Box<ExprType>),
 }
 
 impl fmt::Debug for ExprType {
@@ -31,6 +32,7 @@ impl fmt::Debug for ExprType {
             ExprType::FunctionPointer(arg_types, ret_type) => {
                 write!(f, "FunctionPointer({:?} -> {:?})", arg_types, ret_type)
             }
+            ExprType::Array(expr_type) => write!(f, "Array of {:?}", expr_type),
         }
     }
 }
@@ -69,6 +71,7 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         // new to bet
         TypedExpr::Unit => ExprType::Unit,
         TypedExpr::FunName(expr_type, _) => expr_type.clone(),
+        TypedExpr::Array(expr_type, _) => expr_type.clone(),
     }
 }
 
@@ -195,6 +198,7 @@ pub enum TypedExpr {
     Lookup(ExprType, Box<TypedExpr>, String),
     /* --- New to bet --- */
     Unit,
+    Array(ExprType, Box<TypedExpr>), // TODO: remove first expr type?
 }
 
 #[derive(Debug)]

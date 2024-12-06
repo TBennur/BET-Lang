@@ -737,6 +737,16 @@ success_tests! {
     
     // Final tests
     {
+        name: final_useless_parens,
+        file: "final/parens.bet",
+        expected: "69"
+    },
+    {
+        name: final_unit_parens,
+        file: "final/parens_unit.bet",
+        expected: "unit"
+    },
+    {
         name: final_basic_comment,
         file: "final/basic_comment.bet",
         expected:"5"

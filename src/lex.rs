@@ -57,7 +57,7 @@ impl Lexer {
 
                 ch if self.conf.is_open(ch) => {
                     self.state.split_partial_str();
-                    
+
                     // make new context
                     let curr_opening_ind = index_of(&self.conf.open, ch).unwrap();
                     let new_context = LexState::new(Some(curr_opening_ind));
@@ -134,7 +134,7 @@ impl Lexer {
                             continue;
                         }
                         self.state.partial_str.pop().unwrap(); // undo push
-                                                          // give up on building operator; split off partial string
+                                                               // give up on building operator; split off partial string
                         self.state.split_partial_str();
                         // fallthrough to process ch
                     }
@@ -162,7 +162,7 @@ impl Lexer {
         }
         // panic!("{:?}", state.context);
         self.state.split_partial_list(true); // implicitly the entire str is wrapped in {}
-        
+
         Lexpr::List(std::mem::take(&mut self.state.context))
     }
 }
@@ -196,9 +196,11 @@ impl Default for LexerConfig {
                 "+", "-", "*", "<", ">", "||", "&&",
             ],
             ignore: vec![' ', '\t', '\n'],
-            open: vec!['(', '{'],
-            closing: vec![')', '}'],
-            delims: vec![',', ';'],
+            open: vec!['(', '{', '['],
+            closing: vec![')', '}', ']'],
+            delims: vec![
+                ',', ';', /* array access must only have one entry-- no delims */ '\0',
+            ],
             default_delim: ';', // the delim to use when not in any of open
             comment_open: '#',
             comment_closing: '\n',

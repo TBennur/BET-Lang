@@ -15,6 +15,7 @@ pub fn type_to_flag(t: ExprType) -> i32 {
         ExprType::Unit => UNIT_TYPE_FLAG,
         ExprType::StructPointer(i) => i,
         ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
+        ExprType::Array(_expr_type) => todo!(),
     }
 }
 
@@ -630,6 +631,7 @@ fn compile_expr_to_instrs(
                 ExprType::FunctionPointer(_arg_types, _ret_type) => {
                     panic!("Unexpected: Attempted to create an Function pointer pointer. This should not happen")
                 }
+                ExprType::Array(_expr_type) => todo!(),
             };
             let size = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => layout_dict.len() as i32,
@@ -683,6 +685,7 @@ fn compile_expr_to_instrs(
                 }
                 ExprType::FunctionPointer(_arg_type, _ret_type) => 
                     panic!("Unexpected: Attempted to access a Function pointer pointer. This should not happen"),
+                ExprType::Array(_expr_type) => todo!(),
             };
             let offset = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
@@ -761,6 +764,7 @@ fn compile_expr_to_instrs(
                 ExprType::FunctionPointer(_arg_types, _ret_type) => panic!(
                     "Unexpected: Attempted to access an Function pointer pointer. This should not happen"
                 ),
+                ExprType::Array(_expr_type) => todo!(),
             };
             let offset = match struct_layouts.get(&type_string) {
                 Some(StructLayout::Layout(layout_dict)) => match layout_dict.get(field_name) {
@@ -800,6 +804,7 @@ fn compile_expr_to_instrs(
         TypedExpr::FunName(_expr_type, name) => {
             vec![Instr::Lea(Val::Reg(Reg::RAX), Val::Global(name.to_owned()))]
         }
+        TypedExpr::Array(_expr_type, _typed_expr) => todo!(),
     }
 }
 
@@ -887,7 +892,8 @@ fn serialize_struct_layouts(
                             None => unreachable!(),
                         }
                     }
-                    ExprType::FunctionPointer(_arg_type, _ret_type) => "todo!()".to_string(), // todo!()
+                    ExprType::FunctionPointer(_arg_type, _ret_type) => "todo!()".to_string(),
+                    ExprType::Array(_expr_type) => todo!(),
                 },
                 None => unreachable!(),
             });
