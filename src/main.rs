@@ -6,6 +6,7 @@ mod parse;
 mod semantics;
 mod structs;
 mod typecheck;
+mod stack;
 
 use std::env;
 use std::fs::File;
