@@ -1,0 +1,24 @@
+# demonstrates how functional arguments can be chained to get more complex function sigs like ()->()->()->unit
+
+fun ret_unit()::unit{
+    print(3);
+    # empty block
+};
+
+fun ret_ret_unit()::()->unit {
+    print(2);
+    ret_unit
+};
+
+fun ret_ret_ret_unit()::()->()->unit{
+    print(1);
+    ret_ret_unit
+};
+
+let (x := ret_ret_ret_unit) { # ()->()->()->unit
+    (
+       (
+            x() # ()->()->unit
+        )() # ()->unit
+    )() # unit
+}

@@ -5,7 +5,7 @@ use crate::semantics::struct_type_enum_to_name;
 
 /* --- Types --- */
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ExprType {
     Int,
     Bool,
@@ -13,6 +13,8 @@ pub enum ExprType {
     StructPointer(i32), // pointer to a struct, whose name is contained in STRUCT_NUM_TO_NAME[i32]
     // new to bet
     Unit,
+    FunctionPointer(Vec<ExprType>, Box<ExprType>), // arg types, then ret type
+    Array(Box<ExprType>),
 }
 
 impl fmt::Debug for ExprType {
@@ -27,11 +29,15 @@ impl fmt::Debug for ExprType {
                 }
             }
             ExprType::Unit => write!(f, "Unit"),
+            ExprType::FunctionPointer(arg_types, ret_type) => {
+                write!(f, "FunctionPointer({:?} -> {:?})", arg_types, ret_type)
+            }
+            ExprType::Array(expr_type) => write!(f, "Array of {:?}", expr_type),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum FunSignature {
     // to insert into function signature hashmap, for type_check_expr
     Sig(ExprType, Vec<(ExprType, String)>),
@@ -43,26 +49,29 @@ pub enum StructSignature {
 }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {
+    // TODO CLONE
     match t {
         TypedExpr::Number(_) => ExprType::Int,
         TypedExpr::RDInput => ExprType::Int,
         TypedExpr::Boolean(_) => ExprType::Bool,
         TypedExpr::Input => ExprType::Int,
-        TypedExpr::Id(expr_type, _) => *expr_type,
-        TypedExpr::Let(expr_type, _, _) => *expr_type,
-        TypedExpr::UnOp(expr_type, _, _) => *expr_type,
-        TypedExpr::BinOp(expr_type, _, _, _) => *expr_type,
-        TypedExpr::If(expr_type, _, _, _) => *expr_type,
-        TypedExpr::RepeatUntil(expr_type, _, _) => *expr_type,
-        TypedExpr::Set(expr_type, _, _) => *expr_type,
-        TypedExpr::Block(expr_type, _) => *expr_type,
-        TypedExpr::Call(expr_type, _, _) => *expr_type,
-        TypedExpr::Null(expr_type) => *expr_type,
-        TypedExpr::Alloc(expr_type) => *expr_type,
-        TypedExpr::Update(expr_type, _, _, _) => *expr_type,
-        TypedExpr::Lookup(expr_type, _, _) => *expr_type,
+        TypedExpr::Id(expr_type, _) => expr_type.clone(),
+        TypedExpr::Let(expr_type, _, _) => expr_type.clone(),
+        TypedExpr::UnOp(expr_type, _, _) => expr_type.clone(),
+        TypedExpr::BinOp(expr_type, _, _, _) => expr_type.clone(),
+        TypedExpr::If(expr_type, _, _, _) => expr_type.clone(),
+        TypedExpr::RepeatUntil(expr_type, _, _) => expr_type.clone(),
+        TypedExpr::Set(expr_type, _, _) => expr_type.clone(),
+        TypedExpr::Block(expr_type, _) => expr_type.clone(),
+        TypedExpr::Call(expr_type, _, _) => expr_type.clone(),
+        TypedExpr::Null(expr_type) => expr_type.clone(),
+        TypedExpr::Alloc(expr_type) => expr_type.clone(),
+        TypedExpr::Update(expr_type, _, _, _) => expr_type.clone(),
+        TypedExpr::Lookup(expr_type, _, _) => expr_type.clone(),
         // new to bet
         TypedExpr::Unit => ExprType::Unit,
+        TypedExpr::FunName(expr_type, _) => expr_type.clone(),
+        TypedExpr::Array(expr_type, _) => expr_type.clone(),
     }
 }
 
@@ -122,7 +131,7 @@ impl fmt::Display for Op2 {
 
 /* --- Parsed, not Type-checked --- */
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Number(i32),
     Boolean(bool),
@@ -135,7 +144,9 @@ pub enum Expr {
     Set(String, Box<Expr>),
     Block(Vec<Expr>),
     Input,
-    Call(String, Vec<Expr>),
+    FunName(String),
+    // TODO: Support function pointers
+    Call(Box<Expr>, Vec<Expr>),
     /* --- new to egg-eater --- */
     Null(String), // null pointer to a struct type specified by name
     Alloc(String),
@@ -162,7 +173,7 @@ pub enum Prog {
 
 /* --- Type Checked --- */
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum TypedExpr {
     Number(i32),
     Boolean(bool),
@@ -174,7 +185,10 @@ pub enum TypedExpr {
     RepeatUntil(ExprType, Box<TypedExpr>, Box<TypedExpr>),
     Set(ExprType, String, Box<TypedExpr>),
     Block(ExprType, Vec<TypedExpr>),
-    Call(ExprType, String, Vec<TypedExpr>), // ExprType is return type of call
+    // Function Pointers
+    FunName(ExprType, String), // (fun_type, fun_name) // fun_type is ret type & expr types
+    Call(ExprType, Box<TypedExpr>, Vec<TypedExpr>), // (return_type, function_name_or_pointer, arguments)
+
     Input,
     RDInput,
     /* --- New to egg-eater --- */
@@ -184,8 +198,10 @@ pub enum TypedExpr {
     Lookup(ExprType, Box<TypedExpr>, String),
     /* --- New to bet --- */
     Unit,
+    Array(ExprType, Box<TypedExpr>), // TODO: remove first expr type?
 }
 
+#[derive(Debug)]
 pub enum TypedFunction {
     // for use in a program
     Fun(String, FunSignature, TypedExpr),
@@ -196,6 +212,7 @@ pub enum StructLayout {
     Layout(HashMap<String, i32>),
 }
 
+#[derive(Debug)]
 pub enum TypedProg {
     // everything which will be compiled
     // structs aren't compiled-- they're reduced to sizes (alloc) and offsets (lookup, update)
@@ -212,6 +229,7 @@ pub enum TypedProg {
 
 #[derive(Debug)]
 pub enum FunctionLabel {
+    Pointer(Reg),
     Custom(String),
     SnekPrint,
     SnekError,
@@ -237,6 +255,7 @@ pub enum Reg {
 
 #[derive(Debug)]
 pub enum Instr {
+    Align(i32),
     IMov(Val, Val), // mov dest, source
     IAdd(Val, Val),
     ISub(Val, Val),

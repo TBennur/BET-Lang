@@ -66,11 +66,11 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         /* --- New to eggeater --- */
         "struct", // struct *<name type>: used to declare a new struct type
         "null",   // e: ... | null: a universal pointer type, which can be a pointer to any type
-        "alloc",  // (alloc <name>): evaluates to a pointer to a new struct of type <name>
-        "update", // (update e1 <name> e2): updates field <name> to the value of <e2> of struct-pointer <e1>
-        "lookup", // (lookup e <name>): evaluates to the value of field <name> which the struct-pointer <e> points to
+        "new",  // (new <name>): evaluates to a pointer to a new struct of type <name>
         /* --- New to bet --- */
         "unit",
+        "->",
+        "new_vec", // new_vec(type, size)
     ])
 });
 
@@ -147,22 +147,14 @@ pub fn struct_name_to_type_enum(name: &String) -> i32 {
     }
 }
 
-pub fn type_str_to_expr_type(s: &String) -> ExprType {
-    // valid, known types
-    if s == "int" {
-        return ExprType::Int;
-    } else if s == "bool" {
-        return ExprType::Bool;
-    } else if s == "unit" {
-        return ExprType::Unit;
+pub fn single_type_str_to_expr_type(name: &String) -> ExprType {
+    match &name as &str {
+        "int" => ExprType::Int,
+        "bool" => ExprType::Bool,
+        "unit" => ExprType::Unit,
+
+        // non basic type; assume is structname
+        s if is_keyword(s) =>panic!("Invalid type: reserved keyword{:?}", s),
+        _ =>ExprType::StructPointer(struct_name_to_type_enum(name)),
     }
-
-    // we will assume that it's a pointer to a struct
-
-    // definitely illegal struct name
-    if is_keyword(s) {
-        panic!("Invalid type: reserved keyword{:?}", s)
-    }
-
-    ExprType::StructPointer(struct_name_to_type_enum(s))
 }

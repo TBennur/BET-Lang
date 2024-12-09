@@ -1,0 +1,20 @@
+# (int, int)->int
+fun plus_int(x::int, y::int)::int {
+    print(false);
+    print(x);
+    print(y);
+    print(false);
+    print(x + y)
+};
+
+
+# (int, int, ((int, int) -> int)) -> int
+fun many_ints(a::int, b::int, c::(int, int)->int)::int {
+    print(true);
+    print(a);
+    print(b);
+    print(true);
+    c(a, b)
+};
+
+many_ints(1, 2, plus_int)

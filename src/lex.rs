@@ -11,6 +11,160 @@ pub enum Lexpr {
     List(Vec<Lexpr>),
     CurlyList(Vec<Lexpr>),
     ParenList(Vec<Lexpr>),
+    Stolen, // special fake lexpr which the parser creates when taking
+}
+
+impl Default for Lexpr {
+    fn default() -> Self {
+        Lexpr::Stolen
+    }
+}
+
+#[derive(Default)]
+pub struct Lexer {
+    conf: LexerConfig,
+    stack: Vec<LexState>,
+    state: LexState,
+}
+
+impl Lexer {
+    pub fn new(conf: LexerConfig) -> Self {
+        Lexer {
+            conf,
+            stack: Vec::new(),
+            state: LexState::default(),
+        }
+    }
+
+    pub fn lex(&mut self, s: &String) -> Lexpr {
+        for (i, ch) in s.char_indices() {
+            if self.state.in_comment {
+                if self.conf.is_comment_close(ch) {
+                    self.state.in_comment = false;
+                }
+                continue;
+            }
+
+            match ch {
+                ch if self.conf.is_ignore(ch) => {
+                    self.state.split_partial_str();
+                }
+
+                ch if self.conf.is_comment_open(ch) => {
+                    self.state.in_comment = true;
+                    continue;
+                }
+
+                ch if self.conf.is_open(ch) => {
+                    self.state.split_partial_str();
+
+                    // make new context
+                    let curr_opening_ind = index_of(&self.conf.open, ch).unwrap();
+                    let new_context = LexState::new(Some(curr_opening_ind));
+
+                    // push old context
+                    let old_context = std::mem::replace(&mut self.state, new_context);
+                    assert!(!old_context.in_comment);
+                    self.stack.push(old_context);
+                }
+
+                ch if self.conf.is_close(ch) => {
+                    let closing_index = index_of(&self.conf.closing, ch).unwrap();
+
+                    if Some(closing_index) != self.state.opening_ind {
+                        let expected = match self.state.opening_ind {
+                            Some(ind) => Some(self.conf.closing[ind]),
+                            None => None,
+                        };
+                        panic!(
+                            "Illegal: closing {ch} at position {i} did not match opening {:?}",
+                            expected
+                        );
+                    }
+
+                    // we have a valid closing
+                    self.state.split_partial_list(true);
+
+                    // pop from previous closures, adding this closure to its partial_list
+                    match self.stack.pop() {
+                        None => unreachable!("We started with a curr_opening_ind == -1"),
+                        Some(updated_state) => {
+                            let old_state = std::mem::replace(&mut self.state, updated_state);
+                            if let Some(vec) = old_state.active_unary_ops {
+                                assert!(vec.len() > 0);
+                                panic!("Had unary ops which weren't bound: {:?}", vec)
+                            }
+
+                            assert!(self.state.partial_str.len() == 0);
+                            self.state
+                                .partial_list
+                                .push(match self.conf.open[closing_index] {
+                                    '{' => Lexpr::CurlyList(old_state.context),
+                                    '(' => Lexpr::ParenList(old_state.context),
+                                    _ => unreachable!(),
+                                });
+                        }
+                    }
+                }
+
+                ch if self.conf.is_delim(ch) => {
+                    let expected_delim = match self.state.opening_ind {
+                        Some(expected_ind) => self.conf.delims[expected_ind],
+                        None => self.conf.default_delim,
+                    };
+                    if expected_delim != ch {
+                        panic!("Mismatched delimiter: got {ch} when we expected {expected_delim}");
+                    }
+
+                    // delimiter matches; split off the partial_string, then the partial_list
+                    self.state.split_partial_list(false);
+                }
+
+                ch if self.conf.is_unary_op(ch) => {
+                    self.state.encounter_unary_op(ch);
+                    continue;
+                }
+
+                ch if ch.is_ascii() => {
+                    // if we were looking for an operator, check if we can continue building an operator with the current char (always prefer longer operators)
+                    if self.state.finding_operator {
+                        self.state.partial_str.push(ch);
+                        if self.conf.is_potential_operator(&self.state.partial_str) {
+                            // continue building operator
+                            continue;
+                        }
+                        self.state.partial_str.pop().unwrap(); // undo push
+                                                               // give up on building operator; split off partial string
+                        self.state.split_partial_str();
+                        // fallthrough to process ch
+                    }
+
+                    // check if this is a start of the operator
+                    if self.conf.is_op_start(ch) {
+                        assert!(!self.state.finding_operator); // as if it was, we either split the partial_str (setting to false) or continued
+                        self.state.split_partial_str();
+                        self.state.partial_str.push(ch);
+                        self.state.finding_operator = true;
+                        continue;
+                    }
+
+                    assert!(!self.state.finding_operator);
+                    self.state.partial_str.push(ch);
+                }
+
+                _ => panic!("Invalid: bad char: {ch}"),
+            }
+        }
+
+        // we expect that there's nothing on the stack
+        if self.stack.len() != 0 {
+            panic!("Invalid: open and closing don't match");
+        }
+        // panic!("{:?}", state.context);
+        self.state.split_partial_list(true); // implicitly the entire str is wrapped in {}
+
+        Lexpr::List(std::mem::take(&mut self.state.context))
+    }
 }
 
 pub struct LexerConfig {
@@ -25,8 +179,8 @@ pub struct LexerConfig {
     comment_closing: char,
 }
 
-impl LexerConfig {
-    pub fn default() -> Self {
+impl Default for LexerConfig {
+    fn default() -> Self {
         Self {
             // unary operators stick to the next thing pushed-- the next string if a
             // non-empty string is pushed next, or the next list if a list is pushed next
@@ -34,7 +188,7 @@ impl LexerConfig {
 
             // we split on operators, but they don't start a new list
             operators: vec![
-                "::", // type annotation
+                "->", "::", // type annotation
                 "==", // strict equality
                 ">=", "<=", ":=", // let bindings or set
                 ".",  // update / access structs,
@@ -42,15 +196,19 @@ impl LexerConfig {
                 "+", "-", "*", "<", ">", "||", "&&",
             ],
             ignore: vec![' ', '\t', '\n'],
-            open: vec!['(', '{'],
-            closing: vec![')', '}'],
-            delims: vec![',', ';'],
+            open: vec!['(', '{', '['],
+            closing: vec![')', '}', ']'],
+            delims: vec![
+                ',', ';', /* array access must only have one entry-- no delims */ '\0',
+            ],
             default_delim: ';', // the delim to use when not in any of open
             comment_open: '#',
             comment_closing: '\n',
         }
     }
+}
 
+impl LexerConfig {
     fn is_ignore(&self, ch: char) -> bool {
         self.ignore.contains(&ch)
     }
@@ -84,15 +242,14 @@ impl LexerConfig {
     fn is_unary_op(&self, ch: char) -> bool {
         self.unaryops.contains(&ch)
     }
-}
 
-struct LexState {
-    active_unary_ops: Option<Vec<char>>, // NONE or the unary op we have
-    opening_ind: Option<usize>,          // NONE or index
-    context: Vec<Lexpr>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
-    partial_list: Vec<Lexpr>, // the list which composes the current list, such as
-    partial_str: String,
-    finding_operator: bool,
+    fn is_comment_open(&self, ch: char) -> bool {
+        self.comment_open == ch
+    }
+
+    fn is_comment_close(&self, ch: char) -> bool {
+        self.comment_closing == ch
+    }
 }
 
 fn atom_from(s: String) -> Atom {
@@ -106,15 +263,32 @@ fn atom_from(s: String) -> Atom {
     Atom::S(s)
 }
 
+struct LexState {
+    active_unary_ops: Option<Vec<char>>, // NONE or the unary op we have
+    opening_ind: Option<usize>,          // NONE or index
+    context: Vec<Lexpr>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
+    partial_list: Vec<Lexpr>, // the list which composes the current list, such as
+    partial_str: String,
+    finding_operator: bool,
+    in_comment: bool,
+}
+
+impl Default for LexState {
+    fn default() -> Self {
+        LexState::new(None)
+    }
+}
+
 impl LexState {
     fn new(opening_ind: Option<usize>) -> LexState {
         LexState {
             active_unary_ops: None,
             opening_ind,
-            context: Vec::new(),
+            context: Vec::with_capacity(1),
             partial_list: Vec::new(),
             partial_str: "".to_string(),
             finding_operator: false,
+            in_comment: false,
         }
     }
 
@@ -145,10 +319,10 @@ impl LexState {
             return;
         }
 
-        let completed_list = std::mem::replace(&mut self.partial_list, Vec::new());
+        let mut completed_list = std::mem::replace(&mut self.partial_list, Vec::new());
         let mut to_push = match completed_list.len() {
             0 => Lexpr::List(vec![]), // allow for unit type in blocks
-            1 => completed_list.into_iter().next().unwrap(),
+            1 => completed_list.pop().unwrap(),
             _ => Lexpr::List(completed_list),
         };
 
@@ -178,21 +352,6 @@ impl LexState {
         };
     }
 }
-// Strips comments
-pub fn strip(s: &String, comment_open: char, comment_closing: char) -> String {
-    let mut is_comment = false;
-    let mut stripped_prog = String::new();
-    for (_i, ch) in s.char_indices() {
-        if ch == comment_open {
-            is_comment = true;
-        } else if is_comment && (ch == comment_closing) {
-            is_comment = false;
-        } else if !is_comment {
-            stripped_prog.push(ch)
-        }
-    }
-    stripped_prog
-}
 
 fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
     match v.iter().position(|eprime| *eprime == e) {
@@ -202,122 +361,5 @@ fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
 }
 
 fn is_prefix_of_any(prefix: &String, vec: &Vec<&str>) -> bool {
-    vec.iter().any(|s| s.starts_with(prefix))
-}
-
-pub fn lex(s: &String, conf: LexerConfig) -> Lexpr {
-    let s_stripped = strip(s, conf.comment_open, conf.comment_closing);
-    let mut stack: Vec<LexState> = Vec::new(); // tuple of index which the context belongs to, and the context
-    let mut state = LexState::new(None);
-    for (i, ch) in s_stripped.char_indices() {
-        match ch {
-            ch if conf.is_ignore(ch) => {
-                state.split_partial_str();
-            }
-
-            ch if conf.is_open(ch) => {
-                state.split_partial_str();
-
-                // push old context
-                stack.push(state);
-
-                // make new context
-                let curr_opening_ind = index_of(&conf.open, ch).unwrap();
-                state = LexState::new(Some(curr_opening_ind));
-            }
-
-            ch if conf.is_close(ch) => {
-                let closing_index = index_of(&conf.closing, ch).unwrap();
-
-                if Some(closing_index) != state.opening_ind {
-                    let expected = match state.opening_ind {
-                        Some(ind) => Some(conf.closing[ind]),
-                        None => None,
-                    };
-                    panic!(
-                        "Illegal: closing {ch} at position {i} did not match opening {:?}",
-                        expected
-                    );
-                }
-
-                // we have a valid closing
-                state.split_partial_list(true);
-
-                // pop from previous closures, adding this closure to its partial_list
-                match stack.pop() {
-                    None => unreachable!("We started with a curr_opening_ind == -1"),
-                    Some(updated_state) => {
-                        let old_state = std::mem::replace(&mut state, updated_state);
-                        if let Some(vec) = old_state.active_unary_ops {
-                            assert!(vec.len() > 0);
-                            panic!("Had unary ops which weren't bound: {:?}", vec)
-                        }
-
-                        assert!(state.partial_str.len() == 0);
-                        state.partial_list.push(match conf.open[closing_index] {
-                            '{' => Lexpr::CurlyList(old_state.context),
-                            '(' => Lexpr::ParenList(old_state.context),
-                            _ => unreachable!(),
-                        });
-                    }
-                }
-            }
-
-            ch if conf.is_delim(ch) => {
-                let expected_delim = match state.opening_ind {
-                    Some(expected_ind) => conf.delims[expected_ind],
-                    None => conf.default_delim,
-                };
-                if expected_delim != ch {
-                    panic!("Mismatched delimiter: got {ch} when we expected {expected_delim}");
-                }
-
-                // delimiter matches; split off the partial_string, then the partial_list
-                state.split_partial_list(false);
-            }
-
-            ch if conf.is_unary_op(ch) => {
-                state.encounter_unary_op(ch);
-                continue;
-            }
-
-            ch if ch.is_ascii() => {
-                // if we were looking for an operator, check if we can continue building an operator with the current char (always prefer longer operators)
-                if state.finding_operator {
-                    let mut op_so_far = state.partial_str.to_string();
-                    op_so_far.push(ch);
-                    if conf.is_potential_operator(&op_so_far) {
-                        // continue building
-                        state.partial_str.push(ch);
-                        continue;
-                    }
-                    // give up on building operator; split off partial string
-                    state.split_partial_str();
-                    // fallthrough to process ch
-                }
-
-                // check if this is a start of the operator
-                if conf.is_op_start(ch) {
-                    assert!(!state.finding_operator); // as if it was, we either split the partial_str (setting to false) or continued
-                    state.split_partial_str();
-                    state.partial_str.push(ch);
-                    state.finding_operator = true;
-                    continue;
-                }
-
-                assert!(!state.finding_operator);
-                state.partial_str.push(ch);
-            }
-
-            _ => panic!("Invalid: bad char: {ch}"),
-        }
-    }
-
-    // we expect that there's nothing on the stack
-    if stack.len() != 0 {
-        panic!("Invalid: open and closing don't match");
-    }
-    // panic!("{:?}", state.context);
-    state.split_partial_list(true); // implicitly the entire str is wrapped in {}
-    Lexpr::List(state.context)
+    vec.iter().any(|s: &&str| s.starts_with(prefix))
 }
