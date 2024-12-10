@@ -1,0 +1,21 @@
+fun int_map_mutates(arr::[int],f::(int)->int)::unit {
+    let (len := arr_len(arr), i := 0) {
+        do {
+            arr[i] := (f(arr[i]));
+            i := i + 1;
+        } until (i == len)
+    }
+};
+
+fun double(x::int)::int{ 2 * x };
+
+let (len := 10, my_arr := new_arr(int, len), i := 0) {
+    # initialize array
+    do {
+        my_arr[i] := i;
+        i := i + 1;
+    } until (i == len);
+
+    # double each elem
+    int_map_mutates(my_arr, double);
+}

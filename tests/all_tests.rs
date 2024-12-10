@@ -1500,6 +1500,11 @@ static_error_tests! {
         expected: "Unrecognized"
     },
     {
+        name: final_fun_ptr_bad,
+        file: "final/fun_ptr_bad.bet",
+        expected: "Unrecognized"
+    },
+    {
         name: final_arr_bad_len,
         file: "final/arr_bad_len.bet",
         expected: "mismatch"

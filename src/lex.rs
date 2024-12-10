@@ -29,6 +29,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
+    /*
     pub fn new(conf: LexerConfig) -> Self {
         Lexer {
             conf,
@@ -36,6 +37,7 @@ impl Lexer {
             state: LexState::default(),
         }
     }
+    */
 
     pub fn lex(&mut self, s: &String) -> Lexpr {
         for (i, ch) in s.char_indices() {

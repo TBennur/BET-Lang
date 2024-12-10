@@ -17,7 +17,13 @@ pub fn type_to_flag(t: ExprType) -> i32 {
         ExprType::Unit => UNIT_TYPE_FLAG,
         ExprType::StructPointer(i) => i,
         ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
-        ExprType::Array(_expr_type) => todo!(),
+        ExprType::Array(expr_type) =>{
+            match *expr_type {
+                ExprType::Int => 10_000_000,
+                _ => todo!()
+            }
+
+        },
     }
 }
 

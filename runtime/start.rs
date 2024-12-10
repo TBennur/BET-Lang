@@ -89,6 +89,7 @@ pub extern "C" fn snek_error(error_flag: i64) {
     std::process::exit(1);
 }
 
+const IS_INT_ARR: u64 = 10_000_000;
 const IS_BOOL: u64 = 0;
 const IS_INT: u64 = 1;
 const IS_UNIT: u64 = 2;
@@ -98,7 +99,27 @@ const IS_UNIT: u64 = 2;
 pub extern "C" fn snek_print(value: i64, type_flag: u64, msg: i64) -> i64 {
     let c_str = unsafe { std::ffi::CStr::from_ptr(msg as *const i8) };
     let str_slice = c_str.to_str().expect("Invalid UTF-8");
-    if type_flag == IS_BOOL {
+
+    if type_flag == IS_INT_ARR {
+        let arr_size = match i64_to_addr(value) {
+            None => {
+                snek_error(-1);
+                0
+            }
+            Some(&arr_size) => arr_size,
+        };
+        let mut vals: Vec<i64> = Vec::new();
+        for i in 0..arr_size {
+            vals.push(*i64_to_addr(value + (SIZEOF_I_64 * (i + 1))).unwrap());
+        }
+        println!(
+            "[{}]",
+            vals.iter()
+                .map(|num| num.to_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+    } else if type_flag == IS_BOOL {
         if value == 0 {
             println!("false");
         } else {

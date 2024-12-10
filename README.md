@@ -1,6 +1,43 @@
 ## Introduction
 Bet is a type-safe, memory-safe programming language created as part of CMU's 17-363: Programming Language Pragmatics
 
+## Conway's Game of Life Demo
+
+Generate .BET file (game state loader function):
+```bash
+python conways_wrapper.py -m generate -dim 100
+cat ./tests/final/conways.bet
+```
+
+Compiling:
+```bash
+make clean && make ./tests/final/conways.run
+```
+
+Running Conways (100 iterations)
+```bash
+./tests/final/conways.run 100
+```
+
+Running, coloring output:
+```bash
+./tests/final/conways.run 100 | python3 term_color.py
+```
+
+Visualizing (generate gif from what conways.run prints):
+```bash
+./tests/final/conways.run 100 > output.txt
+python conways_wrapper.py -m visualize
+```
+
+Entire process (random seed each time)
+```bash
+python conways_wrapper.py -m generate -dim 100 &&
+make clean && make ./tests/final/conways.run &&
+./tests/final/conways.run 100 > output.txt &&
+python conways_wrapper.py -m visualize
+```
+
 ## Concrete Syntax
 
 Please note: the braces, `[]`, are currently not used for anything; they just serve to show what the `*` and `+` operators are being applied to, without being confused for parentheses
@@ -173,3 +210,4 @@ let (
   x.right 
 }
 ```
+
