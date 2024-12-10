@@ -1,0 +1,26 @@
+struct printable_arr(arr::[int], printer::([int])->unit);
+
+fun print_arr(arr::[int])::unit {
+    let (i := 0) {
+        do {
+            print(arr[i]);
+            i := i + 1;
+        } until (i >= (arr_len(arr)));
+    }
+};
+
+fun make_countable_arr(arr::[int])::unit {
+    let (i := 0) {
+        do {
+            arr[i] := i;
+            i := i + 1;
+        } until (i >= (arr_len(arr)));
+    }
+};
+
+let (x := (new printable_arr)) {
+    x.arr := (new_arr(int, input));
+    make_countable_arr(x.arr);
+    x.printer := print_arr;
+    (x.printer)(x.arr)
+}

@@ -1,0 +1,3 @@
+let (x := new_arr(int, true)) {
+    x[5]
+}

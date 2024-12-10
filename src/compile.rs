@@ -1,3 +1,5 @@
+use std::vec;
+
 use im::HashMap;
 
 use crate::consts::*;
@@ -15,7 +17,13 @@ pub fn type_to_flag(t: ExprType) -> i32 {
         ExprType::Unit => UNIT_TYPE_FLAG,
         ExprType::StructPointer(i) => i,
         ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
-        ExprType::Array(_expr_type) => todo!(),
+        ExprType::Array(expr_type) =>{
+            match *expr_type {
+                ExprType::Int => 10_000_000,
+                _ => todo!()
+            }
+
+        },
     }
 }
 
@@ -804,7 +812,238 @@ fn compile_expr_to_instrs(
         TypedExpr::FunName(_expr_type, name) => {
             vec![Instr::Lea(Val::Reg(Reg::RAX), Val::Global(name.to_owned()))]
         }
-        TypedExpr::Array(_expr_type, _typed_expr) => todo!(),
+        
+        TypedExpr::ArrayAlloc(_elem_t, len) => {
+            
+            let mut instructions = compile_expr_to_instrs(
+                len,
+                scope_bindings.clone(),
+                &struct_layouts,
+                rsp_offset,
+                label_counter,
+                label_name,
+            ); // requested num elems is in RAX
+            
+            // Throw runtime if num of elements is <= 0
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1))); // num_elem ? 1
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(4))); // num_elem < 1 : error
+            instructions.push(Instr::JumpLess(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // Put num elements on top of stack 
+            let mut curr_rsp_offset = rsp_offset;
+            curr_rsp_offset -= SIZEOF_I_64; // get 8 bytes of space on the stack
+            let a_rsp_offset = curr_rsp_offset;
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+                Val::Reg(Reg::RAX),
+            ));
+
+            // Convert from number of elements to size, alloc size should be in RAX
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1))); 
+            instructions.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(SIZEOF_I_64)));
+            // size (byte) is in RAX 
+
+            // logic: if (RBX + alloc_size) > BUFFER_SIZE, go to ERROR_LABEL
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := (num bytes allocated + num bytes needed)
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(BUFFER_SIZE))); // if (num bytes allocated + num bytes needed) > BUFFER_SIZE:
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(2)));
+            instructions.push(Instr::JumpGreater(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+            
+            // Put unaltered size-- number of elements-- in RDI (will write to 0th elem of backing array)
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            ));
+
+            // we have enough room; load in array to rax
+            instructions.push(Instr::Lea(
+                Val::Reg(Reg::RAX),
+                Val::Global(BUFFER_NAME.to_string()),
+            )); // rax := &array
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := &array + rbx
+            
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RAX, 0),
+                Val::Reg(Reg::RDI),
+            )); // mov (rax), RDI
+        
+            
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1))); 
+            instructions.push(Instr::IMul(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64)));
+
+            // update the total bytes allocated, so that the next alloc points to next free addrr
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RBX), Val::Reg(Reg::RDI))); // rbx := num bytes allocated + num bytes needed
+            instructions
+
+        },
+        TypedExpr::ArrayLen(_elem_t, arr_addr) => {
+            let mut instructions = compile_expr_to_instrs(arr_addr, 
+                scope_bindings, 
+                struct_layouts, 
+                rsp_offset, 
+                label_counter,
+                label_name
+            );
+
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if arr is null
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
+            instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // didn't die, so struct ptr isn't null, so access
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RAX, SIZEOF_I_64 * 0),
+            ));
+
+            instructions
+        },
+        TypedExpr::ArrayLookup(_elem_t, arr, ind_expr) => {
+
+            let mut curr_rsp_offset = rsp_offset;
+            let mut instructions = Vec::new();
+            
+            instructions.extend(compile_expr_to_instrs(
+                arr,
+                scope_bindings.clone(),
+                &struct_layouts,
+                curr_rsp_offset,
+                label_counter,
+                label_name,
+            )); // requested arr is in RAX
+            
+            // if arr ptr is null, die
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
+            instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // If not null, put arr on top of stack 
+            curr_rsp_offset -= SIZEOF_I_64; // get 8 bytes of space on the stack
+            let a_rsp_offset = curr_rsp_offset;
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+                Val::Reg(Reg::RAX),
+            ));
+
+            instructions.extend(compile_expr_to_instrs(
+                ind_expr,
+                scope_bindings.clone(),
+                &struct_layouts,
+                curr_rsp_offset,
+                label_counter,
+                label_name,
+            )); // index now in rax
+            
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // RDI := index
+            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset))); // RAX := address of array
+            instructions.push(Instr::IMov(Val::RegOffset(Reg::RSP, a_rsp_offset), Val::Reg(Reg::RDI))); // index on stack
+
+            // didn't die, so arr ptr isn't null, so test bounds
+            instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::Imm(0))); // if indice is negative fail
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
+            instructions.push(Instr::JumpLess(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested index
+            instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RAX, 0))); // if indice is greater or equal to len fail
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
+            instructions.push(Instr::JumpGreaterEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // null & bounds check cleared; update element
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested elem index
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1)));
+            instructions.push(Instr::IMul(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64))); // rdi now contains index in bytes
+            
+
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))); // rax now contains address of array index to write to
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RAX, SIZEOF_I_64 * 0),
+            )); // rax now contains element
+
+            instructions
+        },
+        TypedExpr::ArrayUpdate(_elem_t, arr, ind_expr, new_val) => {
+            let mut curr_rsp_offset = rsp_offset;
+            let mut instructions = Vec::new();
+            
+            instructions.extend(compile_expr_to_instrs(
+                arr,
+                scope_bindings.clone(),
+                &struct_layouts,
+                curr_rsp_offset,
+                label_counter,
+                label_name,
+            )); // requested arr is in RAX
+            
+            // if arr ptr is null, die
+            instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
+            instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // If not null, put arr on top of stack 
+            curr_rsp_offset -= SIZEOF_I_64; // get 8 bytes of space on the stack
+            let a_rsp_offset = curr_rsp_offset;
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+                Val::Reg(Reg::RAX),
+            ));
+
+            instructions.extend(compile_expr_to_instrs(
+                ind_expr,
+                scope_bindings.clone(),
+                &struct_layouts,
+                curr_rsp_offset,
+                label_counter,
+                label_name,
+            )); // index now in rax
+            
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // RDI := index
+            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset))); // RAX := address of array
+            instructions.push(Instr::IMov(Val::RegOffset(Reg::RSP, a_rsp_offset), Val::Reg(Reg::RDI))); // index on stack
+
+            // didn't die, so arr ptr isn't null, so test bounds
+            instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::Imm(0))); // if indice is negative fail
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
+            instructions.push(Instr::JumpLess(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested index
+            instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RAX, 0))); // if indice is greater or equal to len fail
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
+            instructions.push(Instr::JumpGreaterEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+
+            // null & bounds check cleared; get address of element
+            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested elem index
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1)));
+            instructions.push(Instr::IMul(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64))); // rdi now contains index in bytes
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // rdi now contains address of array index to write to
+
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+                Val::Reg(Reg::RDI),
+            ));
+            
+            instructions.extend(compile_expr_to_instrs(
+                    new_val, 
+                    scope_bindings, 
+                    struct_layouts, 
+                    curr_rsp_offset, 
+                    label_counter, 
+                    label_name
+                )
+            ); // RAX now contains new value
+
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // rdi now contains address of array index to 
+
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RDI, 0),
+                Val::Reg(Reg::RAX),
+            ));
+
+            instructions
+        
+        },
     }
 }
 
@@ -892,8 +1131,8 @@ fn serialize_struct_layouts(
                             None => unreachable!(),
                         }
                     }
-                    ExprType::FunctionPointer(_arg_type, _ret_type) => "todo!()".to_string(),
-                    ExprType::Array(_expr_type) => todo!(),
+                    ExprType::FunctionPointer(_arg_type, _ret_type) => "todo!(function pointer)".to_string(),
+                    ExprType::Array(_expr_type) => "todo!(array)".to_string(),
                 },
                 None => unreachable!(),
             });

@@ -1,0 +1,24 @@
+struct pair(x::int, y::int);
+
+# test creating an array of arrays
+let (
+    a := new_arr([pair], input),
+    i := 0,
+    j := 0
+){
+    do {
+        a[i] := (new_arr(pair, input));
+        do {
+            a[i][j] := (let (p := new pair) {
+                p.x := i;
+                p.y := j;
+                p
+            });
+            j := j + 1;
+        } until (j == (arr_len(a[i])));
+        i := i + 1;
+        j := 0;
+    } until (i == (arr_len(a)));
+    print(a[input - 4][input - 5].x);
+    a[input - 4][input - 5].y
+}

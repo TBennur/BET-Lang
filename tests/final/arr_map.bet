@@ -1,0 +1,30 @@
+fun arr_map(x::[int], foo::(int)->int)::[int] {
+    let (
+        len := arr_len(x),
+        i := 0
+    ) {
+        do {
+            x[i] := (foo(x[i]));
+            i := i + 1
+        } until(i >= len);
+    };
+    x
+};
+
+fun double(x::int)::int {
+    x * 2
+};
+
+let (
+    len := 100,
+    x := new_arr(int, len),
+    i := 0
+) {
+    do {
+        x[i] := i;
+        i := i + 1
+    } until(i >= len);
+
+    arr_map(x, double);
+    x[input]
+}

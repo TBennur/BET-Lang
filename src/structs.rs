@@ -71,7 +71,10 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         // new to bet
         TypedExpr::Unit => ExprType::Unit,
         TypedExpr::FunName(expr_type, _) => expr_type.clone(),
-        TypedExpr::Array(expr_type, _) => expr_type.clone(),
+        TypedExpr::ArrayAlloc(expr_type, _) => ExprType::Array(Box::new(expr_type.clone())),
+        TypedExpr::ArrayLookup(expr_type, _, _) => expr_type.clone(),
+        TypedExpr::ArrayUpdate(expr_type, _, _, _) => expr_type.clone(),
+        TypedExpr::ArrayLen(expr_type, _) => expr_type.clone(),
     }
 }
 
@@ -152,7 +155,11 @@ pub enum Expr {
     Alloc(String),
     Update(Box<Expr>, String, Box<Expr>),
     Lookup(Box<Expr>, String),
-    Unit, // TODO: do we want this to be an expression?
+    Unit,                                         // TODO: do we want this to be an expression?
+    ArrayLookup(Box<Expr>, Box<Expr>),            // arr[ind] => ArrayLookup(arr, ind)
+    ArrayUpdate(Box<Expr>, Box<Expr>, Box<Expr>), // arr[ind] := new_val => ArrayUpdate(arr, ind, new_val)
+    ArrayAlloc(ExprType, Box<Expr>), // new_arr(<type>, size) => ArrayAlloc(<type>, size)
+    ArrayLen(Box<Expr>) // arr_len(arr)
 }
 
 #[derive(Debug)]
@@ -198,7 +205,12 @@ pub enum TypedExpr {
     Lookup(ExprType, Box<TypedExpr>, String),
     /* --- New to bet --- */
     Unit,
-    Array(ExprType, Box<TypedExpr>), // TODO: remove first expr type?
+    ArrayAlloc(ExprType, Box<TypedExpr>), // array pointer
+    ArrayLookup(ExprType, Box<TypedExpr>, Box<TypedExpr>), // ArrayLookup(arr::array(t), ind::int)::t
+    
+    /// ArrayUpdate(arr::array(t), ind::int, elem::t)::t
+    ArrayUpdate(ExprType, Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
+    ArrayLen(ExprType, Box<TypedExpr>) // ArrayLen(int, Box<array>)
 }
 
 #[derive(Debug)]

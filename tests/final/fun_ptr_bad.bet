@@ -1,0 +1,6 @@
+
+fun x(a::((bob)->int)->int)::bool {
+    true
+};
+
+0
