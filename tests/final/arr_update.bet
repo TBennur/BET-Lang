@@ -1,0 +1,6 @@
+fun empty()::unit{
+};
+
+let (x := new_arr(()->unit, 10)) {
+    x[0] := empty
+}

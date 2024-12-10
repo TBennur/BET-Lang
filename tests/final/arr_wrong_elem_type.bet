@@ -1,0 +1,4 @@
+# checks what happens when you try to set an array to an element of the wrong type
+let (x := new_arr(int, 10)) {
+    x[0] := true;
+}

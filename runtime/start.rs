@@ -79,6 +79,10 @@ pub extern "C" fn snek_error(error_flag: i64) {
         eprintln!("Runtime error: out of space");
     } else if error_flag == 3 {
         eprintln!("Runtime error: null dereference");
+    } else if error_flag == 4 {
+        eprintln!("Runtime error: invalid array size");
+    } else if error_flag == 5 {
+        eprintln!("Runtime error: invalid array access");
     } else {
         eprintln!("Runtime error: unknown");
     }

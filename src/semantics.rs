@@ -70,7 +70,7 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         /* --- New to bet --- */
         "unit",
         "->",
-        "new_vec", // new_vec(type, size)
+        "new_arr", // new_arr(type, size)
     ])
 });
 

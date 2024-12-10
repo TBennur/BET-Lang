@@ -1,0 +1,4 @@
+
+let (x := new_arr(()->unit, input)) {
+    arr_len(x);
+}

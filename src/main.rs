@@ -39,13 +39,13 @@ fn main() -> std::io::Result<()> {
 
     let bet_prog = parse_prog(&mut bet_lexed);
     println!("parsed in {}", start.elapsed().as_millis());
-    // start = std::time::Instant::now();
 
-    // println!("{:?}", bet_prog);
     let bet_typed = bet_prog.typecheck();
-    println!("typed");
+    println!("typed in {}", start.elapsed().as_millis());
+
     let bet_optimized = optimize_prog(&bet_typed);
-    println!("optimized");
+    println!("optimized in {}", start.elapsed().as_millis());
+
     let bet_compiled = compile_prog(&bet_optimized);
     println!("compiled");
 

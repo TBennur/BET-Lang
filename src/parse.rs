@@ -1,11 +1,11 @@
 use crate::lex;
 use crate::semantics::*;
-use crate::structs::*;
 use crate::stack::*;
+use crate::structs::*;
 use core::panic;
 use lex::Atom::{F, I, S};
 use lex::Lexpr;
-use lex::Lexpr::{Atom, CurlyList, List, ParenList};
+use lex::Lexpr::{Atom, BraceList, CurlyList, List, ParenList};
 
 fn package_lexr_vec(mut s: Vec<Lexpr>) -> Lexpr {
     if s.len() == 0 {
@@ -58,9 +58,8 @@ fn construct_if(subexprs: Vec<Expr>) -> Expr {
     }
 }
 
-
 impl OneStep<Expr> for Lexpr {
-    fn step(self) -> StepResult<Self, Expr>{
+    fn step(self) -> StepResult<Self, Expr> {
         match self {
             // atoms
             Atom(I(n)) => match <i32>::try_from(n) {
@@ -80,6 +79,122 @@ impl OneStep<Expr> for Lexpr {
 
             // List: a sequence of lexprs which are one expression
             List(mut list_contents) => match &mut *list_contents {
+                // array lookup: arr[ind]
+                [.., _, BraceList(_contents)] => {
+                    let index = match list_contents.pop().unwrap() {
+                        BraceList(mut contents) => {
+                            if contents.len() == 1 {
+                                contents.pop().unwrap()
+                            } else {
+                                panic!("Array index lookup with more than one index")
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    let new_context = StackState::new(
+                        vec![package_lexr_vec(list_contents), index],
+                        |mut parsed| {
+                            if parsed.len() != 2 {
+                                panic!("expected parsed length to have same length as unparsed")
+                            }
+                            let parsed_ind = parsed.pop().unwrap();
+                            let parsed_arr = parsed.pop().unwrap();
+                            Expr::ArrayLookup(Box::new(parsed_arr), Box::new(parsed_ind))
+                        },
+                    );
+
+                    StepResult::Nonterminal(new_context)
+                }
+
+                // array update: arr[ind] := (new_val)
+                [.., _, BraceList(_ind), Atom(S(walrus)), _new_val] if walrus == ":=" => {
+                    let new_val = list_contents.pop().unwrap();
+
+                    let _walrus = list_contents.pop().unwrap();
+
+                    let index = match list_contents.pop().unwrap() {
+                        BraceList(mut contents) => {
+                            if contents.len() == 1 {
+                                contents.pop().unwrap()
+                            } else {
+                                panic!("Array index lookup with more than one index")
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    let new_context = StackState::new(
+                        vec![package_lexr_vec(list_contents), index, new_val],
+                        |mut parsed| {
+                            if parsed.len() != 3 {
+                                panic!("expected parsed to have same length as unparsed")
+                            }
+                            let parsed_new_val = parsed.pop().unwrap();
+                            let parsed_index = parsed.pop().unwrap();
+                            let parsed_arr = parsed.pop().unwrap();
+
+                            Expr::ArrayUpdate(
+                                Box::new(parsed_arr),
+                                Box::new(parsed_index),
+                                Box::new(parsed_new_val),
+                            )
+                        },
+                    );
+
+                    StepResult::Nonterminal(new_context)
+                }
+
+                // array allocation: new_arr(<type>, len)
+                [Atom(S(new_arr_kwd)), ParenList(_type_then_len)] if new_arr_kwd == "new_arr" => {
+                    let (unparsed_type, unparsed_len) = match list_contents.pop().unwrap() {
+                        ParenList(mut type_then_len) => {
+                            if type_then_len.len() != 2 {
+                                panic!("Parse Error: Tried to parse new_arr but got wrong number of arguments (expected type, len, got: {:?})", type_then_len)
+                            }
+                            let unparsed_len = type_then_len.pop().unwrap();
+                            let unparsed_type = type_then_len.pop().unwrap();
+                            (unparsed_type, unparsed_len)
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    let type_as_vec = match unparsed_type {
+                        List(vec) => vec,
+                        other => vec![other]
+                    };
+
+                    let parsed_type = parse_type(type_as_vec.as_slice());
+
+                    let new_context = StackState::new(vec![unparsed_len], |mut parsed| {
+                        if parsed.len() != 1 {
+                            panic!("expected parsed to have same len as unparsed")
+                        }
+
+                        let parsed_len = parsed.pop().unwrap();
+                        Expr::ArrayAlloc(parsed_type, Box::new(parsed_len))
+                    });
+
+                    StepResult::Nonterminal(new_context)
+                }
+
+                [Atom(S(len_kwd)), ParenList(just_arr)] if len_kwd == "arr_len" => {
+                    if just_arr.len() != 1 {
+                        panic!("arr_len keyword operates on a single array")
+                    }
+
+                    let unparsed_arr = just_arr.pop().unwrap();
+
+                    let new_context = StackState::new(vec![unparsed_arr], |mut parsed| {
+                        if parsed.len() != 1 {
+                            panic!("Expected parsed to have the same length as unparsed")
+                        }
+                        Expr::ArrayLen(Box::new(parsed.pop().unwrap()))
+                    });
+
+                    StepResult::Nonterminal(new_context)
+                }
+
                 [Atom(S(if_kwd)), ParenList(cond_vec), true_block, Atom(S(else_kwd)), false_block]
                     if if_kwd == "if" && else_kwd == "else" =>
                 {
@@ -155,9 +270,7 @@ impl OneStep<Expr> for Lexpr {
                         vec![package_lexr_vec(list_contents)],
                         move |mut parsed| {
                             if parsed.len() != 1 {
-                                unreachable!(
-                                    "we expect parsed to have the same length as unparded"
-                                )
+                                unreachable!("we expect parsed to have the same length as unparded")
                             };
                             let parsed = parsed.pop().unwrap();
 
@@ -190,16 +303,15 @@ impl OneStep<Expr> for Lexpr {
                     if unparsed.is_empty() {
                         StepResult::Terminal(Expr::Call(Box::new(fun_name.unwrap()), vec![]))
                     } else {
-                        StepResult::Nonterminal(StackState::new(
-                            unparsed,
-                            |mut parsed| match fun_name {
+                        StepResult::Nonterminal(StackState::new(unparsed, |mut parsed| {
+                            match fun_name {
                                 Some(name) => Expr::Call(Box::new(name), parsed),
                                 None => {
                                     let parsed_ptr = parsed.pop().unwrap();
                                     Expr::Call(Box::new(parsed_ptr), parsed)
                                 }
-                            },
-                        ))
+                            }
+                        }))
                     }
                 }
 
@@ -245,15 +357,18 @@ impl OneStep<Expr> for Lexpr {
 
                     let cond = cond.pop().unwrap();
                     let body_block = expect_block(std::mem::take(body_block)).unwrap();
-                    StepResult::Nonterminal(StackState::new(vec![body_block, cond], |mut parsed| {
-                        if parsed.len() == 2 {
-                            let parsed_cond = parsed.pop().unwrap();
-                            let parsed_body = parsed.pop().unwrap();
-                            Expr::RepeatUntil(Box::new(parsed_body), Box::new(parsed_cond))
-                        } else {
-                            panic!("expected to get same number of parsed as unparsed")
-                        }
-                    }))
+                    StepResult::Nonterminal(StackState::new(
+                        vec![body_block, cond],
+                        |mut parsed| {
+                            if parsed.len() == 2 {
+                                let parsed_cond = parsed.pop().unwrap();
+                                let parsed_body = parsed.pop().unwrap();
+                                Expr::RepeatUntil(Box::new(parsed_body), Box::new(parsed_cond))
+                            } else {
+                                panic!("expected to get same number of parsed as unparsed")
+                            }
+                        },
+                    ))
                 }
 
                 // set!
@@ -285,16 +400,20 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // null TODO SUPPORT ARR AND FUN PTRS
-                [Atom(S(null_kwd)), Atom(S(struct_name))] if null_kwd == "null" => StepResult::Terminal(Expr::Null(name_to_string(
+                [Atom(S(null_kwd)), Atom(S(struct_name))] if null_kwd == "null" => {
+                    StepResult::Terminal(Expr::Null(name_to_string(
                         &struct_name,
                         NameType::StructName,
-                    ))),
+                    )))
+                }
 
                 // new (alloc) TODO SUPPORT ARR AND FUN PTRS
-                [Atom(S(new_kwd)), Atom(S(struct_name))] if new_kwd == "new" => StepResult::Terminal(Expr::Alloc(name_to_string(
+                [Atom(S(new_kwd)), Atom(S(struct_name))] if new_kwd == "new" => {
+                    StepResult::Terminal(Expr::Alloc(name_to_string(
                         &struct_name,
                         NameType::StructName,
-                    ))),
+                    )))
+                }
 
                 // lookup: <some things>.field_name
                 [.., _, Atom(S(dot)), Atom(S(_field_name))] if dot == "." => {
@@ -393,13 +512,19 @@ impl OneStep<Expr> for Lexpr {
             ParenList(mut vec) => {
                 match vec.len().cmp(&1) {
                     std::cmp::Ordering::Less => StepResult::Terminal(Expr::Unit), // zero
-                    std::cmp::Ordering::Equal => StepResult::Nonterminal(
-                        StackState::new(vec![vec.pop().unwrap()], unwrap_onelem_vec)
-                        ), // TODO: TEST
+                    std::cmp::Ordering::Equal => StepResult::Nonterminal(StackState::new(
+                        vec![vec.pop().unwrap()],
+                        unwrap_onelem_vec,
+                    )), // TODO: TEST
                     std::cmp::Ordering::Greater => panic!("Invalid parens: {:?}.", vec),
                 }
             }
             Lexpr::Stolen => unreachable!(), // stolen should be filtered by ParseState::new()
+
+            Lexpr::BraceList(vec) => panic!(
+                "invalid expression: brackets not used for array access [{:?}]",
+                vec
+            ),
         }
     }
 }
@@ -446,11 +571,24 @@ fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
         // struct, base type
         [Atom(S(single_type))] => single_type_str_to_expr_type(single_type),
 
+        // array type
+        [BraceList(elem_type)] => {
+            if elem_type.len() != 1 {
+                panic!("array type should only have one type: {:?}", elem_type)
+            }
+            ExprType::Array(Box::new(parse_type(&elem_type[0..1])))
+        }
+
         // function type
         [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if arrow == "->" => {
             let parsed_arg_types = arg_types
                 .into_iter()
-                .map(std::slice::from_ref)
+                .map(|lexpr| {
+                    match lexpr {
+                        List(vec) => &vec[..],
+                        a => std::slice::from_ref(a),
+                    }
+                })
                 .map(parse_type)
                 .collect();
             let parsed_ret_type: ExprType = parse_type(ret_type);
@@ -524,7 +662,7 @@ fn parse_struct_def(s: &Lexpr) -> Option<UserStruct> {
 }
 
 fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
-    // check if it could even be a function defenition
+    // check if it could even be a function definition
     let decl = match s {
         List(declaration) => declaration,
         _ => return None,
@@ -590,7 +728,7 @@ pub fn parse_prog(lexpr: &mut Lexpr) -> Prog {
         }
 
         // must be illegal!
-        panic!("Invalid: Improperly formed defenition {:#?}", definition)
+        panic!("Invalid: Improperly formed definition {:#?}", definition)
     }
     Prog::Program(struct_defs, fn_defs, parse_expr(std::mem::take(body))) // TODO: CLONE
 }
@@ -603,4 +741,3 @@ fn is_wrapped_expr_non_kword(lexpr: &Lexpr) -> bool {
         _ => false,
     }
 }
-

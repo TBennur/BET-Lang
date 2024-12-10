@@ -186,8 +186,22 @@ fn optimize_expr(e: &TypedExpr) -> TypedExpr {
         ),
         TypedExpr::Lookup(t, var, field) => {
             TypedExpr::Lookup(t.clone(), Box::new(optimize_expr(var)), field.clone())
-        }
-
+        },
+        TypedExpr::ArrayAlloc(t, len_expr) => TypedExpr::ArrayAlloc(
+            t.clone(), 
+            Box::new(optimize_expr(len_expr)),
+        ), 
+        TypedExpr::ArrayUpdate(t, arr_expr, ind_expr, val_expr) => TypedExpr::ArrayUpdate(
+            t.clone(), 
+            arr_expr.clone(), 
+            Box::new(optimize_expr(&ind_expr)),
+            Box::new(optimize_expr(&val_expr)),
+        ),
+        TypedExpr::ArrayLookup(t, arr_expr, ind_expr) => TypedExpr::ArrayLookup(
+            t.clone(), 
+            arr_expr.clone(), 
+            Box::new(optimize_expr(&ind_expr)),
+        ),
         t_e => t_e.clone(),
     }
 }
@@ -212,7 +226,6 @@ pub fn optimize_prog(tp: &TypedProg) -> TypedProg {
     for typed_fun in typed_funs {
         optimized_fns.push(optimize_fn(typed_fun));
     }
-
     let optimized_e = optimize_expr(typed_e);
 
     TypedProg::Program(

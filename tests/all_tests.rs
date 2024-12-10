@@ -907,6 +907,71 @@ success_tests! {
         file: "final/fun_ptr_struct.bet",
         expected: "6"
     },
+    {
+        name: final_arr_len1,
+        file: "final/arr_basic.bet",
+        input: "10",
+        expected: "unit",
+    },
+    {
+        name: final_arr_len2,
+        file: "final/arr_basic.bet",
+        input: "1000",
+        expected: "unit",
+    },
+    {
+        name: final_arr_lookup1,
+        file: "final/arr_lookup.bet",
+        input: "0",
+        expected: "0",
+    },
+    {
+        name: final_arr_lookup2,
+        file: "final/arr_lookup.bet",
+        input: "9",
+        expected: "0",
+    },
+    {
+        name: final_arr_map1,
+        file: "final/arr_map.bet",
+        input: "9",
+        expected: "18",
+    },
+    {
+        name: final_arr_map2,
+        file: "final/arr_map.bet",
+        input: "2",
+        expected: "4",
+    },
+    {
+        name: final_arr_arr1,
+        file: "final/arr_arr.bet",
+        input: "10",
+        expected: "6\n5",
+    },
+    {
+        name: final_arr_arr2,
+        file: "final/arr_arr.bet",
+        input: "100",
+        expected: "96\n95",
+    },
+    {
+        name: final_arr_struct1,
+        file: "final/arr_struct.bet",
+        input: "3",
+        expected: "0\n1\n2\nunit",
+    },
+    {
+        name: final_arr_struct2,
+        file: "final/arr_struct.bet",
+        input: "1",
+        expected: "0\nunit",
+    },
+    {
+        name: final_triple_arr,
+        file: "final/arr_tripple_dept.bet",
+        expected: "420",
+    },
 }
 
 runtime_error_tests! {
@@ -970,6 +1035,37 @@ runtime_error_tests! {
         file: "final/fun_ptr_null_deref.bet",
         expected: "null dereference",
     },
+    {
+        name: final_neg_arr_len,
+        file: "final/arr_basic.bet",
+        input: "-1",
+        expected: "invalid array size",
+    },
+    {
+        name: final_zero_arr_len,
+        file: "final/arr_basic.bet",
+        input: "0",
+        expected: "invalid array size",
+    },
+    {
+        name: final_huge_arr_len,
+        file: "final/arr_basic.bet",
+        input: "100000000",
+        expected: "out of space",
+    },
+    {
+        name: final_neg_lookup,
+        file: "final/arr_lookup.bet",
+        input: "-1",
+        expected: "invalid array access",
+    },
+    {
+        name: final_huge_lookup,
+        file: "final/arr_lookup.bet",
+        input: "19",
+        expected: "invalid array access",
+    },
+    
 }
 
 static_error_tests! {
@@ -1377,5 +1473,50 @@ static_error_tests! {
         name: final_both_and_mismatch,
         file: "final/both_and_mismatch.bet",
         expected:"mismatch"
+    },
+    {
+        name: final_arr_wrong_elem_type,
+        file: "final/arr_wrong_elem_type.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_arr_non_int_ind,
+        file: "final/arr_non_int_ind.bet",
+        expected:"mismatch"
+    },
+    {
+        name: final_arr_bad_read,
+        file: "final/arr_read_fail.bet",
+        expected: "Invalid"
+    },
+    {
+        name: final_arr_bad_type,
+        file: "final/arr_bad_type.bet",
+        expected: "Unrecognized"
+    },
+    {
+        name: final_arr_arr_bad_type,
+        file: "final/arr_arr_bad_type.bet",
+        expected: "Unrecognized"
+    },
+    {
+        name: final_arr_bad_len,
+        file: "final/arr_bad_len.bet",
+        expected: "mismatch"
+    },
+    {
+        name: final_arr_non_int_write,
+        file: "final/arr_non_int_write.bet",
+        expected: "mismatch"
+    },
+    {
+        name: final_new_arr_missing_arg,
+        file: "final/new_arr_missing.bet",
+        expected: "Parse Error"
+    },
+    {
+        name: final_new_arr_extra_arg,
+        file: "final/new_arr_extra.bet",
+        expected: "Parse Error"
     },
 }

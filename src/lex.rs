@@ -11,6 +11,7 @@ pub enum Lexpr {
     List(Vec<Lexpr>),
     CurlyList(Vec<Lexpr>),
     ParenList(Vec<Lexpr>),
+    BraceList(Vec<Lexpr>),
     Stolen, // special fake lexpr which the parser creates when taking
 }
 
@@ -101,6 +102,7 @@ impl Lexer {
                                 .push(match self.conf.open[closing_index] {
                                     '{' => Lexpr::CurlyList(old_state.context),
                                     '(' => Lexpr::ParenList(old_state.context),
+                                    '[' => Lexpr::BraceList(old_state.context),
                                     _ => unreachable!(),
                                 });
                         }
