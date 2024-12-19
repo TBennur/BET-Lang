@@ -31,20 +31,20 @@ impl GrowSlice {
         if self.len == 0 {
             self.len = 1;
             self.start_ind = ind;
-            return Ok(())
+            return Ok(());
         }
 
         // can only push if last index is previous index
         let next_ind = self.start_ind + self.len;
         if next_ind != ind {
-            return Err(format!("tried to push index {ind} to {:?}", self))
+            return Err(format!("tried to push index {ind} to {:?}", self));
         }
         self.len += 1;
         Ok(())
     }
 
     // pop the ind at the back of the GrowSlice
-    fn shrink_one(&mut self) -> Result<usize, String>  {
+    fn shrink_one(&mut self) -> Result<usize, String> {
         if self.len > 0 {
             let last_ind = self.start_ind + self.len - 1;
             self.len -= 1;
@@ -55,9 +55,224 @@ impl GrowSlice {
     }
 }
 
+mod lex_config {
+
+    use super::AsciiMap;
+    type Flag = u8;
+    const EMPTY_FLAG: Flag = 0;
+    const IS_OPEN_FLAG: Flag = 1 << 0;
+    const IS_CLOSE_FLAG: Flag = 1 << 1;
+    const IS_DELIM_FLAG: Flag = 1 << 2;
+    const IS_IGNORE_FLAG: Flag = 1 << 3;
+    const IS_OP_START_FLAG: Flag = 1 << 4;
+    const IS_UNARY_OP_FLAG: Flag = 1 << 5;
+    const IS_COMMENT_OPEN_FLAG: Flag = 1 << 6;
+    const IS_COMMENT_CLOSE_FLAG: Flag = 1 << 7;
+
+    #[derive(Debug)]
+    pub struct LexerConfig {
+        unaryops: Vec<u8>,
+        operators: Vec<Vec<u8>>,
+        ignore: Vec<u8>,
+        pub open: Vec<u8>,
+        pub closing: Vec<u8>,
+        pub delims: Vec<u8>,
+        pub default_delim: u8,
+        comment_open: u8,
+        comment_closing: u8,
+    }
+
+    impl Default for LexerConfig {
+        fn default() -> Self {
+            Self {
+                // unary operators stick to the next thing pushed-- the next string if a
+                // non-empty string is pushed next, or the next list if a list is pushed next
+                unaryops: vec![b'~', b'!'],
+
+                // we split on operators, but they don't start a new list
+                operators: vec![
+                    "->".into(),
+                    "::".into(), // type annotation
+                    "==".into(), // strict equality
+                    ">=".into(),
+                    "<=".into(),
+                    ":=".into(), // let bindings or set
+                    ".".into(),  // update / access structs,
+                    // ops
+                    "+".into(),
+                    "-".into(),
+                    "*".into(),
+                    "<".into(),
+                    ">".into(),
+                    "||".into(),
+                    "&&".into(),
+                ],
+                ignore: vec![b' ', b'\t', b'\n'],
+                open: vec![b'(', b'{', b'['],
+                closing: vec![b')', b'}', b']'],
+                delims: vec![
+                    b',', b';', /* array access must only have one entry-- no delims */ b'\0',
+                ],
+                default_delim: b';', // the delim to use when not in any of open
+                comment_open: b'#',
+                comment_closing: b'\n',
+            }
+        }
+    }
+
+
+    #[derive(Debug)]
+    pub struct FastConfig {
+        flags_map: AsciiMap<Flag>, // maps a char to its flags
+        open_ind_map: AsciiMap<usize>,
+        close_ind_map: AsciiMap<usize>,
+        operators: Vec<Vec<u8>>,
+        pub open: Vec<u8>,
+        pub closing: Vec<u8>,
+        pub delims: Vec<u8>,
+        pub default_delim: u8,
+    }
+
+    impl Default for FastConfig {
+        fn default() -> FastConfig {
+            FastConfig::new(LexerConfig::default())
+        }
+    }
+
+    impl FastConfig {
+        pub fn new(conf: LexerConfig) -> Self {
+            let mut char_flags: [Flag; 256] = [EMPTY_FLAG; 256];
+            for ch in conf.unaryops {
+                char_flags[ch as usize] |= IS_UNARY_OP_FLAG;
+            }
+            for ch in conf.ignore {
+                char_flags[ch as usize] |= IS_IGNORE_FLAG;
+            }
+            for &ch in conf.open.as_slice() {
+                char_flags[ch as usize] |= IS_OPEN_FLAG;
+            }
+            for &ch in conf.closing.as_slice() {
+                char_flags[ch as usize] |= IS_CLOSE_FLAG;
+            }
+            for &ch in conf.delims.as_slice() {
+                char_flags[ch as usize] |= IS_DELIM_FLAG;
+            }
+            for op in &conf.operators {
+                assert!(op.len() > 0);
+                char_flags[op[0] as usize] |= IS_OP_START_FLAG;
+            }
+
+            char_flags[conf.comment_open as usize] |= IS_COMMENT_OPEN_FLAG;
+            char_flags[conf.comment_closing as usize] |= IS_COMMENT_CLOSE_FLAG;
+
+            let k_v_pairs = char_flags
+                .iter()
+                .enumerate()
+                .filter(|(_ch, flag)| **flag != EMPTY_FLAG)
+                .map(|(ch, flag)| (ch as u8, *flag as Flag))
+                .collect();
+
+            let flags_map = AsciiMap::new(k_v_pairs);
+            let close_ind_map = AsciiMap::new(
+                conf.closing
+                    .iter()
+                    .enumerate()
+                    .map(|(ind, &val)| (val, ind))
+                    .collect(),
+            );
+            let open_ind_map = AsciiMap::new(
+                conf.open
+                    .iter()
+                    .enumerate()
+                    .map(|(ind, &val)| (val, ind))
+                    .collect(),
+            );
+            Self {
+                flags_map,
+                operators: conf.operators,
+                open: conf.open,
+                closing: conf.closing,
+                delims: conf.delims,
+                default_delim: conf.default_delim,
+                open_ind_map,
+                close_ind_map,
+            }
+        }
+
+        pub fn is_open(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_OPEN_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_unary_op(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_UNARY_OP_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_ignore(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_IGNORE_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_comment_close(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_COMMENT_CLOSE_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_comment_open(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_COMMENT_OPEN_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_close(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_CLOSE_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_delim(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_DELIM_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_op_start(&self, ch: u8) -> bool {
+            match self.flags_map.get(ch) {
+                None => false,
+                Some(&flag) => (flag & IS_OP_START_FLAG) != EMPTY_FLAG,
+            }
+        }
+
+        pub fn is_potential_operator(&self, op_so_far: impl AsRef<[u8]>) -> bool {
+            super::is_prefix_of_any(op_so_far, &self.operators)
+        }
+
+        pub fn open_ind_of(&self, ch: u8) -> Option<usize> {
+            self.open_ind_map.get(ch).copied()
+        }
+        pub fn close_ind_of(&self, ch: u8) -> Option<usize> {
+            self.close_ind_map.get(ch).copied()
+        }
+    }
+}
+
+use lex_config::{FastConfig, LexerConfig};
+
 #[derive(Default, Debug)]
 pub struct Lexer {
-    conf: LexerConfig,
+    conf: lex_config::FastConfig,
     stack: Vec<LexState>,
     state: LexState,
 }
@@ -65,7 +280,7 @@ pub struct Lexer {
 impl Lexer {
     pub fn new(conf: LexerConfig) -> Self {
         Lexer {
-            conf,
+            conf: FastConfig::new(conf),
             stack: Vec::new(),
             state: LexState::default(),
         }
@@ -100,7 +315,7 @@ impl Lexer {
                     self.state.split_partial_str(&s, i + 1);
 
                     // make new context
-                    let curr_opening_ind = index_of(&self.conf.open, ch).unwrap();
+                    let curr_opening_ind = self.conf.open_ind_of(ch).unwrap();
                     let new_context = LexState::new(Some(curr_opening_ind));
 
                     // push old context
@@ -110,7 +325,7 @@ impl Lexer {
                 }
 
                 ch if self.conf.is_close(ch) => {
-                    let closing_index = index_of(&self.conf.closing, ch).unwrap();
+                    let closing_index = self.conf.close_ind_of(ch).unwrap();
 
                     if Some(closing_index) != self.state.opening_ind {
                         let expected = match self.state.opening_ind {
@@ -177,7 +392,7 @@ impl Lexer {
                             continue;
                         }
                         self.state.partial_str.shrink_one().unwrap(); // undo push
-                                                                        // give up on building operator; split off partial string
+                                                                      // give up on building operator; split off partial string
                         self.state.split_partial_str(&s, i);
                         // fallthrough to process ch
                     }
@@ -209,97 +424,28 @@ impl Lexer {
 }
 
 #[derive(Debug)]
-pub struct LexerConfig {
-    unaryops: Vec<u8>,
-    operators: Vec<Vec<u8>>,
-    ignore: Vec<u8>,
-    open: Vec<u8>,
-    closing: Vec<u8>,
-    delims: Vec<u8>,
-    default_delim: u8,
-    comment_open: u8,
-    comment_closing: u8,
+pub struct AsciiMap<T> {
+    vals: [Option<T>; 256],
 }
 
-impl Default for LexerConfig {
-    fn default() -> Self {
-        Self {
-            // unary operators stick to the next thing pushed-- the next string if a
-            // non-empty string is pushed next, or the next list if a list is pushed next
-            unaryops: vec![b'~', b'!'],
+impl<T: std::marker::Copy> AsciiMap<T> {
+    fn get(&self, ch: u8) -> Option<&T> {
+        self.vals[ch as usize].as_ref()
+    }
+    fn set(&mut self, ch: u8, val: T) {
+        self.vals[ch as usize] = Some(val);
+    }
+    fn del(&mut self, ch: u8) {
+        self.vals[ch as usize] = None;
+    }
 
-            // we split on operators, but they don't start a new list
-            operators: vec![
-                "->".into(),
-                "::".into(), // type annotation
-                "==".into(), // strict equality
-                ">=".into(),
-                "<=".into(),
-                ":=".into(), // let bindings or set
-                ".".into(),  // update / access structs,
-                // ops
-                "+".into(),
-                "-".into(),
-                "*".into(),
-                "<".into(),
-                ">".into(),
-                "||".into(),
-                "&&".into(),
-            ],
-            ignore: vec![b' ', b'\t', b'\n'],
-            open: vec![b'(', b'{', b'['],
-            closing: vec![b')', b'}', b']'],
-            delims: vec![
-                b',', b';', /* array access must only have one entry-- no delims */ b'\0',
-            ],
-            default_delim: b';', // the delim to use when not in any of open
-            comment_open: b'#',
-            comment_closing: b'\n',
+    fn new(k_v_pairs: Vec<(u8, T)>) -> AsciiMap<T> {
+        let mut res = AsciiMap::<T> { vals: [None; 256] };
+
+        for (k, v) in k_v_pairs {
+            res.vals[k as usize] = Some(v);
         }
-    }
-}
-
-impl LexerConfig {
-    fn is_ignore(&self, ch: u8) -> bool {
-        self.ignore.contains(&ch)
-    }
-
-    fn is_open(&self, ch: u8) -> bool {
-        self.open.contains(&ch)
-    }
-
-    fn is_close(&self, ch: u8) -> bool {
-        self.closing.contains(&ch)
-    }
-
-    fn is_delim(&self, ch: u8) -> bool {
-        self.delims.contains(&ch)
-    }
-
-    fn is_potential_operator(&self, op_so_far: impl AsRef<[u8]>) -> bool {
-        is_prefix_of_any(op_so_far, &self.operators)
-    }
-
-    fn is_op_start(&self, ch: u8) -> bool {
-        for op in &self.operators {
-            assert!(op.len() > 0);
-            if op[0] == ch {
-                return true;
-            };
-        }
-        false
-    }
-
-    fn is_unary_op(&self, ch: u8) -> bool {
-        self.unaryops.contains(&ch)
-    }
-
-    fn is_comment_open(&self, ch: u8) -> bool {
-        self.comment_open == ch
-    }
-
-    fn is_comment_close(&self, ch: u8) -> bool {
-        self.comment_closing == ch
+        res
     }
 }
 
@@ -357,9 +503,7 @@ impl LexState {
                     // since we pushed to the back, pop to get most recent
                     let cur_uop = uops.pop().unwrap();
                     let uop_atom = Lexpr::Atom(Atom::S((cur_uop as char).to_string()));
-                    let mut v = Vec::with_capacity(2);
-                    v[0] = uop_atom;
-                    v[1] = to_push;
+                    let v = vec![uop_atom, to_push];
                     to_push = Lexpr::List(v);
                 }
                 self.active_unary_ops = None;
@@ -410,17 +554,10 @@ impl LexState {
     }
 }
 
-fn index_of<T: std::cmp::PartialEq>(v: &Vec<T>, e: T) -> Result<usize, String> {
-    match v.iter().position(|eprime| *eprime == e) {
-        Some(pos) => Ok(pos),
-        None => Err("Elem not found".to_string()),
-    }
-}
-
 // fn is_prefix_of_any(prefix: &Vec<u8>, vec: &Vec<Vec<u8>>) -> bool {
 //     vec.iter().any(|s| s.starts_with(prefix))
 // }
-fn is_prefix_of_any<T>(prefix: impl AsRef<[T]>, vec: &[Vec<T>]) -> bool
+pub fn is_prefix_of_any<T>(prefix: impl AsRef<[T]>, vec: &[Vec<T>]) -> bool
 where
     T: PartialEq,
 {
