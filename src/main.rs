@@ -1,6 +1,8 @@
 mod compile;
 mod consts;
 mod lex;
+mod slow_lex;
+mod fast_lex;
 mod optimize;
 mod parse;
 mod semantics;
@@ -13,7 +15,6 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use compile::compile_prog;
-use lex::Lexer;
 use optimize::optimize_prog;
 use parse::parse_prog;
 
@@ -25,15 +26,20 @@ fn main() -> std::io::Result<()> {
     let out_name = &args[2];
 
     // load input file
-    let mut in_file = File::open(in_name)?;
     let mut in_contents = String::new();
-    in_file.read_to_string(&mut in_contents)?;
-
+    File::open(in_name)?.read_to_string(&mut in_contents)?;
+    
+    let mut buf = Vec::new();
+    File::open(in_name)?.read_to_end(&mut buf).unwrap();
+    
     // construct program
+
     println!("read in {}", start.elapsed().as_millis());
     start = std::time::Instant::now();
 
-    let mut bet_lexed = Lexer::default().lex(&in_contents);
+    let mut bet_lexed = slow_lex::Lexer::default().lex(&in_contents);
+    let mut bet_fast_lexed = fast_lex::Lexer::default().lex_fast(buf);
+    // assert_eq!(bet_lexed, bet_fast_lexed);
     println!("lexed in {}", start.elapsed().as_millis());
     start = std::time::Instant::now();
 
