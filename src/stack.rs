@@ -7,17 +7,17 @@ enum StackRetval<From, To> {
     KeepGoing(From),
 }
 
-pub struct StackState<From, To> {
+pub struct StackState<'a, From, To> {
     unparsed: Vec<From>,
     parsed: Vec<To>,
-    constructor: Box<dyn FnOnce(Vec<To>) -> To>,
+    constructor: Box<dyn FnOnce(Vec<To>) -> To + 'a>,
 }
 
-impl<From, To: 'static> StackState<From, To> {
+impl <'a, From, To: 'a> StackState<'a, From, To> {
     pub fn new(
         mut unparsed: Vec<From>,
-        constructor: impl FnOnce(Vec<To>) -> To + 'static,
-    ) -> StackState<From, To> {
+        constructor: impl FnOnce(Vec<To>) -> To + 'a,
+    ) -> StackState<'a, From, To> {
         unparsed.reverse(); // so that popping still scans Left to Right
 
         if unparsed.is_empty() {
@@ -50,27 +50,27 @@ impl<From, To: 'static> StackState<From, To> {
 }
 
 
-pub enum StepResult<From, To>  {
+pub enum StepResult<'a, From, To>  {
     Terminal(To),
-    Nonterminal(StackState<From, To>)
+    Nonterminal(StackState<'a, From, To>)
 }
 
-pub trait OneStep<To> {
-    fn step(self) -> StepResult<Self, To>
+pub trait OneStep<'a, To> {
+    fn step(self) -> StepResult<'a, Self, To>
     where
         Self: Sized;
 }
 
-pub struct IterativeStack<From: OneStep<To>, To> {
-    stack: Vec<StackState<From, To>>,
+pub struct IterativeStack<'a, From: OneStep<'a, To>, To> {
+    stack: Vec<StackState<'a, From, To>>,
 }
 
-impl<From: OneStep<To> , To: 'static> IterativeStack<From, To> {
-    pub fn new() -> IterativeStack<From, To> {
+impl<'a, From: OneStep<'a, To> , To: 'a> IterativeStack<'a, From, To> {
+    pub fn new() -> IterativeStack<'a, From, To> {
         IterativeStack { stack: Vec::new() }
     }
 
-    fn push_state(&mut self, mut to_push: StackState<From, To>) -> StackRetval<From, To> {
+    fn push_state(&mut self, mut to_push: StackState<'a, From, To>) -> StackRetval<From, To> {
         let parse_next = to_push.get_next();
         self.stack.push(to_push);
         parse_next

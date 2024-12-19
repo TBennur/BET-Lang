@@ -147,7 +147,7 @@ pub fn struct_name_to_type_enum(name: &String) -> i32 {
     }
 }
 
-pub fn single_type_str_to_expr_type(name: &String) -> ExprType {
+pub fn single_type_str_to_expr_type(name: &str) -> ExprType {
     match &name as &str {
         "int" => ExprType::Int,
         "bool" => ExprType::Bool,
@@ -155,6 +155,6 @@ pub fn single_type_str_to_expr_type(name: &String) -> ExprType {
 
         // non basic type; assume is structname
         s if is_keyword(s) =>panic!("Invalid type: reserved keyword{:?}", s),
-        _ =>ExprType::StructPointer(struct_name_to_type_enum(name)),
+        _ =>ExprType::StructPointer(struct_name_to_type_enum(&name.to_string())), // TODO STRING
     }
 }

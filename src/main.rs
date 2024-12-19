@@ -1,8 +1,8 @@
 mod compile;
 mod consts;
 mod lex;
-mod slow_lex;
 mod fast_lex;
+mod slow_lex;
 mod optimize;
 mod parse;
 mod semantics;
@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     
     // lex
     start = std::time::Instant::now();
-    let mut bet_fast_lexed = fast_lex::Lexer::default().lex_fast(buf);
+    let mut bet_fast_lexed = fast_lex::Lexer::default().lex_fast(&buf);
     println!("lexed in {}", start.elapsed().as_millis());
     
     // parse

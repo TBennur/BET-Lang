@@ -7,7 +7,7 @@ use lex::Atom::{F, I, S};
 use lex::Lexpr;
 use lex::Lexpr::{Atom, BraceList, CurlyList, List, ParenList};
 
-fn package_lexr_vec(mut s: Vec<Lexpr>) -> Lexpr {
+fn package_lexr_vec<'a>(mut s: Vec<Lexpr<'a>>) -> Lexpr<'a> {
     if s.len() == 0 {
         unreachable!()
     } else if s.len() == 1 {
@@ -58,16 +58,16 @@ fn construct_if(subexprs: Vec<Expr>) -> Expr {
     }
 }
 
-impl OneStep<Expr> for Lexpr {
-    fn step(self) -> StepResult<Self, Expr> {
+impl<'a> OneStep<'a, Expr> for Lexpr<'a> {
+    fn step(self) -> StepResult<'a, Self, Expr> {
         match self {
             // atoms
             Atom(I(n)) => match <i32>::try_from(n) {
                 Ok(num) => StepResult::Terminal(Expr::Number(num)),
                 Err(err) => panic!("Invalid: Could not parse number, raised {:?} instead", err),
             },
-            Atom(S(ref id)) => {
-                let expr = match id.as_str() {
+            Atom(S(id)) => {
+                let expr = match id {
                     "true" => Expr::Boolean(true),
                     "false" => Expr::Boolean(false),
                     "input" => Expr::Input,
@@ -108,7 +108,7 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // array update: arr[ind] := (new_val)
-                [.., _, BraceList(_ind), Atom(S(walrus)), _new_val] if walrus == ":=" => {
+                [.., _, BraceList(_ind), Atom(S(walrus)), _new_val] if *walrus == ":=" => {
                     let new_val = list_contents.pop().unwrap();
 
                     let _walrus = list_contents.pop().unwrap();
@@ -146,7 +146,7 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // array allocation: new_arr(<type>, len)
-                [Atom(S(new_arr_kwd)), ParenList(_type_then_len)] if new_arr_kwd == "new_arr" => {
+                [Atom(S(new_arr_kwd)), ParenList(_type_then_len)] if *new_arr_kwd == "new_arr" => {
                     let (unparsed_type, unparsed_len) = match list_contents.pop().unwrap() {
                         ParenList(mut type_then_len) => {
                             if type_then_len.len() != 2 {
@@ -178,7 +178,7 @@ impl OneStep<Expr> for Lexpr {
                     StepResult::Nonterminal(new_context)
                 }
 
-                [Atom(S(len_kwd)), ParenList(just_arr)] if len_kwd == "arr_len" => {
+                [Atom(S(len_kwd)), ParenList(just_arr)] if *len_kwd == "arr_len" => {
                     if just_arr.len() != 1 {
                         panic!("arr_len keyword operates on a single array")
                     }
@@ -196,7 +196,7 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 [Atom(S(if_kwd)), ParenList(cond_vec), true_block, Atom(S(else_kwd)), false_block]
-                    if if_kwd == "if" && else_kwd == "else" =>
+                    if *if_kwd == "if" && *else_kwd == "else" =>
                 {
                     // if conditions must have exactly one element
                     if cond_vec.len() != 1 {
@@ -219,7 +219,7 @@ impl OneStep<Expr> for Lexpr {
                     StepResult::Nonterminal(new_context)
                 }
 
-                [Atom(S(keyword)), ParenList(bindings), scoped_block] if keyword == "let" => {
+                [Atom(S(keyword)), ParenList(bindings), scoped_block] if *keyword == "let" => {
                     let scoped_block = expect_block(std::mem::take(scoped_block)).unwrap(); // panic if not a block
 
                     if bindings.len() == 0 {
@@ -242,8 +242,8 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // non-alphanum uops
-                [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(&uop.as_str()) => {
-                    match uop.as_str() {
+                [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(uop) => {
+                    match *uop {
                         "~" => {
                             let receiver = std::mem::take(receiver);
                             let new_context = StackState::new(vec![receiver], neg_unop);
@@ -254,10 +254,10 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // alphanum unops
-                [Atom(S(op1)), _, ..] if UNOPS.contains(op1.as_str()) => {
+                [Atom(S(op1)), _, ..] if UNOPS.contains(op1) => {
                     // std::mem::take(op1); // now it shows as Lexpr::Stolen in list_contents
                     // let rest: Vec<_> = rest.iter_mut().map(|x| std::mem::take(x)).collect();
-                    let uop_type = match op1.as_str() {
+                    let uop_type = match *op1 {
                         "add1" => Op1::Add1,
                         "sub1" => Op1::Sub1,
                         "print" => Op1::Print,
@@ -316,8 +316,8 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // binops
-                [lhs, Atom(S(op2)), rhs] if BET_BINOPS.contains(&op2.as_str()) => {
-                    let binop = match op2.as_str() {
+                [lhs, Atom(S(op2)), rhs] if BET_BINOPS.contains(op2) => {
+                    let binop = match *op2 {
                         "+" => Op2::Plus,
                         "-" => Op2::Minus,
                         "*" => Op2::Times,
@@ -346,7 +346,7 @@ impl OneStep<Expr> for Lexpr {
 
                 // do {} while () loop
                 [Atom(S(do_kwd)), body_block, Atom(S(while_kwd)), ParenList(cond)]
-                    if do_kwd == "do" && while_kwd == "until" =>
+                    if *do_kwd == "do" && *while_kwd == "until" =>
                 {
                     if cond.len() != 1 {
                         panic!(
@@ -373,7 +373,7 @@ impl OneStep<Expr> for Lexpr {
 
                 // set!
                 // since this case is below the "let" case, we can match on rest
-                [Atom(S(_id)), Atom(S(walrus)), _, ..] if walrus == ":=" => {
+                [Atom(S(_id)), Atom(S(walrus)), _, ..] if *walrus == ":=" => {
                     // modify list_contents so that it contains only what we need to parse next
                     let id = {
                         let mut drain = list_contents.drain(0..=1);
@@ -400,7 +400,7 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // null TODO SUPPORT ARR AND FUN PTRS
-                [Atom(S(null_kwd)), Atom(S(struct_name))] if null_kwd == "null" => {
+                [Atom(S(null_kwd)), Atom(S(struct_name))] if *null_kwd == "null" => {
                     StepResult::Terminal(Expr::Null(name_to_string(
                         &struct_name,
                         NameType::StructName,
@@ -408,7 +408,7 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // new (alloc) TODO SUPPORT ARR AND FUN PTRS
-                [Atom(S(new_kwd)), Atom(S(struct_name))] if new_kwd == "new" => {
+                [Atom(S(new_kwd)), Atom(S(struct_name))] if *new_kwd == "new" => {
                     StepResult::Terminal(Expr::Alloc(name_to_string(
                         &struct_name,
                         NameType::StructName,
@@ -416,7 +416,7 @@ impl OneStep<Expr> for Lexpr {
                 }
 
                 // lookup: <some things>.field_name
-                [.., _, Atom(S(dot)), Atom(S(_field_name))] if dot == "." => {
+                [.., _, Atom(S(dot)), Atom(S(_field_name))] if *dot == "." => {
                     let field_name = {
                         let field_name = match list_contents.pop().unwrap() {
                             Atom(S(field_name)) => field_name,
@@ -439,7 +439,7 @@ impl OneStep<Expr> for Lexpr {
                                 let parsed_val = parsed.pop().unwrap();
                                 Expr::Lookup(
                                     Box::new(parsed_val),
-                                    name_to_string(&field_name, NameType::StructFieldName),
+                                    name_to_string(field_name, NameType::StructFieldName),
                                 )
                             } else {
                                 panic!("expected to get same number of parsed as unparsed")
@@ -450,7 +450,7 @@ impl OneStep<Expr> for Lexpr {
 
                 // update: <some things>.field_name := ()
                 [.., _, Atom(S(dot)), Atom(S(_field_name)), Atom(S(walrus)), _new_val]
-                    if dot == "." && walrus == ":=" =>
+                    if *dot == "." && *walrus == ":=" =>
                 {
                     // extract field_name, new_val, drop walrus, dot
                     let (field_name, new_val) = {
@@ -580,7 +580,7 @@ fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
         }
 
         // function type
-        [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if arrow == "->" => {
+        [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if *arrow == "->" => {
             let parsed_arg_types = arg_types
                 .into_iter()
                 .map(|lexpr| {
@@ -611,7 +611,7 @@ fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, 
     match &name_and_type[..] {
         // single type
         [Atom(S(field_name)), Atom(S(type_anotation)), field_type @ ..]
-            if type_anotation == "::" =>
+            if *type_anotation == "::" =>
         {
             // Will check field isn't a duplicate in type-check
             (
@@ -634,7 +634,7 @@ fn parse_struct_def(s: &Lexpr) -> Option<UserStruct> {
     };
 
     let (struct_name, fields) = match &decl[..] {
-        [Atom(S(defn_type)), Atom(S(struct_name)), ParenList(fields)] if defn_type == "struct" => {
+        [Atom(S(defn_type)), Atom(S(struct_name)), ParenList(fields)] if *defn_type == "struct" => {
             (struct_name, fields)
         }
         _ => return None,
@@ -670,7 +670,7 @@ fn parse_fn_def(s: &Lexpr) -> Option<UserFunction> {
 
     let (fun_name, params, ret_type, fun_body) = match &decl[..] {
         [Atom(S(fun_keyword)), Atom(S(fun_name)), ParenList(params), Atom(S(type_annotation_kword)), ret_type @ .., fun_body]
-            if fun_keyword == "fun" && type_annotation_kword == "::" =>
+            if *fun_keyword == "fun" && *type_annotation_kword == "::" =>
         {
             (fun_name, params, ret_type, fun_body)
         }

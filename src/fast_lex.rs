@@ -9,7 +9,7 @@ struct GrowSlice {
 }
 
 impl GrowSlice {
-    fn to_slice<'a, T>(&self, arr: &'a Vec<T>) -> &'a [T] {
+    fn to_slice<'a, T>(&self, arr: &'a[T]) -> &'a [T] {
         let start = self.start_ind;
         let end = self.start_ind + self.len;
         &arr[start..end]
@@ -271,13 +271,13 @@ mod lex_config {
 use lex_config::{FastConfig, LexerConfig};
 
 #[derive(Default, Debug)]
-pub struct Lexer {
+pub struct Lexer<'a> {
     conf: lex_config::FastConfig,
-    stack: Vec<LexState>,
-    state: LexState,
+    stack: Vec<LexState<'a>>,
+    state: LexState<'a>,
 }
 
-impl Lexer {
+impl<'a> Lexer<'a> {
     pub fn new(conf: LexerConfig) -> Self {
         Lexer {
             conf: FastConfig::new(conf),
@@ -286,10 +286,9 @@ impl Lexer {
         }
     }
 
-    pub fn lex_fast(&mut self, s: Vec<u8>) -> Lexpr {
-        for (i, ch) in s.iter().enumerate() {
-            let ch = *ch;
-
+    pub fn lex_fast(&mut self, s: &'a [u8]) -> Lexpr<'a> {
+        for (i, ch_ref) in s.iter().enumerate() {
+            let ch = *ch_ref;
             if !ch.is_ascii() {
                 panic!("Invalid: bad char: {ch}")
             }
@@ -378,7 +377,7 @@ impl Lexer {
                 }
 
                 ch if self.conf.is_unary_op(ch) => {
-                    self.state.encounter_unary_op(ch, i + 1);
+                    self.state.encounter_unary_op(ch_ref);
                     continue;
                 }
 
@@ -449,7 +448,7 @@ impl<T: std::marker::Copy> AsciiMap<T> {
     }
 }
 
-fn atom_from(s: String) -> Atom {
+fn atom_from(s: &str) -> Atom {
     if let Ok(x) = s.parse() {
         return Atom::I(x);
     };
@@ -461,24 +460,24 @@ fn atom_from(s: String) -> Atom {
 }
 
 #[derive(Debug)]
-struct LexState {
-    active_unary_ops: Option<Vec<u8>>, // NONE or the unary op we have
+struct LexState<'a> {
+    active_unary_ops: Option<Vec<&'a u8>>, // NONE or the unary op we have
     opening_ind: Option<usize>,        // NONE or index
-    context: Vec<Lexpr>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
-    partial_list: Vec<Lexpr>, // the list which composes the current list, such as
+    context: Vec<Lexpr<'a>>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
+    partial_list: Vec<Lexpr<'a>>, // the list which composes the current list, such as
     partial_str: GrowSlice,
     finding_operator: bool,
     in_comment: bool,
 }
 
-impl Default for LexState {
+impl<'a> Default for LexState<'a> {
     fn default() -> Self {
         LexState::new(None)
     }
 }
 
-impl LexState {
-    fn new(opening_ind: Option<usize>) -> LexState {
+impl<'a> LexState<'a> {
+    fn new(opening_ind: Option<usize>) -> LexState<'a> {
         LexState {
             active_unary_ops: None,
             opening_ind,
@@ -490,19 +489,20 @@ impl LexState {
         }
     }
 
-    fn split_partial_str(&mut self, backing: &Vec<u8>, next_ind: usize) {
+    fn split_partial_str(&mut self, backing: &'a [u8], next_ind: usize) {
         let partial_str = self.partial_str.to_slice(&backing);
         self.partial_str = GrowSlice::new_empty(next_ind);
 
         if partial_str.len() > 0 {
             let mut to_push =
-                Lexpr::Atom(atom_from(String::from_utf8(partial_str.to_vec()).unwrap()));
+                Lexpr::Atom(atom_from(std::str::from_utf8(partial_str).unwrap()));
 
             if let Some(ref mut uops) = self.active_unary_ops {
                 while uops.len() > 0 {
                     // since we pushed to the back, pop to get most recent
                     let cur_uop = uops.pop().unwrap();
-                    let uop_atom = Lexpr::Atom(Atom::S((cur_uop as char).to_string()));
+                    let slice = std::slice::from_ref(cur_uop);
+                    let uop_atom = Lexpr::Atom(Atom::S(std::str::from_utf8(slice).unwrap()));
                     let v = vec![uop_atom, to_push];
                     to_push = Lexpr::List(v);
                 }
@@ -531,7 +531,8 @@ impl LexState {
             while uops.len() > 0 {
                 // since we pushed to the back, pop to get most recent
                 let cur_uop = uops.pop().unwrap();
-                let uop_atom = Lexpr::Atom(Atom::S((cur_uop as char).to_string()));
+                let slice = std::slice::from_ref(cur_uop);
+                let uop_atom = Lexpr::Atom(Atom::S(std::str::from_utf8(slice).unwrap()));
                 to_push = Lexpr::List(vec![uop_atom, to_push]);
             }
             self.active_unary_ops = None;
@@ -541,12 +542,12 @@ impl LexState {
     }
 
     /// Add the current list, if it's non-empty, unwrapping it if needed
-    fn split_partial_list(&mut self, is_closing: bool, backing: &Vec<u8>, next_ind: usize) {
+    fn split_partial_list(&mut self, is_closing: bool, backing: &'a [u8], next_ind: usize) {
         self.split_partial_str(backing, next_ind);
         self._split_partial_list(is_closing);
     }
 
-    fn encounter_unary_op(&mut self, uop: u8, ind: usize) {
+    fn encounter_unary_op(&mut self, uop: &'a u8) {
         match &mut self.active_unary_ops {
             Some(vec) => vec.push(uop),
             None => self.active_unary_ops = Some(vec![uop]),
