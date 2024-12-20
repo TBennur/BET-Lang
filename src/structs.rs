@@ -43,7 +43,7 @@ pub enum FunSignature {
     Sig(ExprType, Vec<(ExprType, String)>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StructSignature {
     Sig(Vec<(ExprType, String)>),
 }
@@ -75,6 +75,37 @@ pub fn extract_type(t: &TypedExpr) -> ExprType {
         TypedExpr::ArrayLookup(expr_type, _, _) => expr_type.clone(),
         TypedExpr::ArrayUpdate(expr_type, _, _, _) => expr_type.clone(),
         TypedExpr::ArrayLen(expr_type, _) => expr_type.clone(),
+    }
+}
+
+impl<'a> FastTypedExpr<'a> {
+    pub fn extract_type(&self) -> ExprType {
+        match self {
+            FastTypedExpr::Number(_) => ExprType::Int,
+            FastTypedExpr::RDInput => ExprType::Int,
+            FastTypedExpr::Boolean(_) => ExprType::Bool,
+            FastTypedExpr::Input => ExprType::Int,
+            FastTypedExpr::Id(expr_type, _) => expr_type.clone(),
+            FastTypedExpr::Let(expr_type, _, _) => expr_type.clone(),
+            FastTypedExpr::UnOp(expr_type, _, _) => expr_type.clone(),
+            FastTypedExpr::BinOp(expr_type, _, _, _) => expr_type.clone(),
+            FastTypedExpr::If(expr_type, _, _, _) => expr_type.clone(),
+            FastTypedExpr::RepeatUntil(expr_type, _, _) => expr_type.clone(),
+            FastTypedExpr::Set(expr_type, _, _) => expr_type.clone(),
+            FastTypedExpr::Block(expr_type, _) => expr_type.clone(),
+            FastTypedExpr::Call(expr_type, _, _) => expr_type.clone(),
+            FastTypedExpr::Null(expr_type) => expr_type.clone(),
+            FastTypedExpr::Alloc(expr_type) => expr_type.clone(),
+            FastTypedExpr::Update(expr_type, _, _, _) => expr_type.clone(),
+            FastTypedExpr::Lookup(expr_type, _, _) => expr_type.clone(),
+            // new to bet
+            FastTypedExpr::Unit => ExprType::Unit,
+            FastTypedExpr::FunName(expr_type, _) => expr_type.clone(),
+            FastTypedExpr::ArrayAlloc(expr_type, _) => ExprType::Array(Box::new(expr_type.clone())),
+            FastTypedExpr::ArrayLookup(expr_type, _, _) => expr_type.clone(),
+            FastTypedExpr::ArrayUpdate(expr_type, _, _, _) => expr_type.clone(),
+            FastTypedExpr::ArrayLen(expr_type, _) => expr_type.clone(),
+        }
     }
 }
 
@@ -159,7 +190,7 @@ pub enum Expr {
     ArrayLookup(Box<Expr>, Box<Expr>),            // arr[ind] => ArrayLookup(arr, ind)
     ArrayUpdate(Box<Expr>, Box<Expr>, Box<Expr>), // arr[ind] := new_val => ArrayUpdate(arr, ind, new_val)
     ArrayAlloc(ExprType, Box<Expr>), // new_arr(<type>, size) => ArrayAlloc(<type>, size)
-    ArrayLen(Box<Expr>) // arr_len(arr)
+    ArrayLen(Box<Expr>),             // arr_len(arr)
 }
 
 #[derive(Debug)]
@@ -207,24 +238,24 @@ pub enum TypedExpr {
     Unit,
     ArrayAlloc(ExprType, Box<TypedExpr>), // array pointer
     ArrayLookup(ExprType, Box<TypedExpr>, Box<TypedExpr>), // ArrayLookup(arr::array(t), ind::int)::t
-    
+
     /// ArrayUpdate(arr::array(t), ind::int, elem::t)::t
     ArrayUpdate(ExprType, Box<TypedExpr>, Box<TypedExpr>, Box<TypedExpr>),
-    ArrayLen(ExprType, Box<TypedExpr>) // ArrayLen(int, Box<array>)
+    ArrayLen(ExprType, Box<TypedExpr>), // ArrayLen(int, Box<array>)
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TypedFunction {
     // for use in a program
     Fun(String, FunSignature, TypedExpr),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StructLayout {
     Layout(HashMap<String, i32>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TypedProg {
     // everything which will be compiled
     // structs aren't compiled-- they're reduced to sizes (alloc) and offsets (lookup, update)
@@ -287,4 +318,120 @@ pub enum Instr {
     JumpOverflow(String),
     Ret,
     Lea(Val, Val), // loads the efective address of the second val into the first
+}
+
+/* More memory efficient Expressions */
+
+#[derive(Debug, Clone)]
+pub enum FastFunSignature<'a> {
+    // to insert into function signature hashmap, for type_check_expr
+    Sig(ExprType, Vec<(ExprType, &'a str)>),
+}
+
+#[derive(Clone, Debug)]
+pub enum FastStructSignature<'a> {
+    Sig(Vec<(ExprType, &'a str)>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum FastExpr<'a> {
+    Number(i32),
+    Boolean(bool),
+    Id(&'a str),
+    Let(Vec<(&'a str, FastExpr<'a>)>, Box<FastExpr<'a>>),
+    UnOp(Op1, Box<FastExpr<'a>>),
+    BinOp(Op2, Box<FastExpr<'a>>, Box<FastExpr<'a>>),
+    If(Box<FastExpr<'a>>, Box<FastExpr<'a>>, Box<FastExpr<'a>>),
+    RepeatUntil(Box<FastExpr<'a>>, Box<FastExpr<'a>>),
+    Set(&'a str, Box<FastExpr<'a>>),
+    Block(Vec<FastExpr<'a>>),
+    Input,
+    FunName(&'a str),
+    // TODO: Support function pointers
+    Call(Box<FastExpr<'a>>, Vec<FastExpr<'a>>),
+    /* --- new to egg-eater --- */
+    Null(&'a str), // null pointer to a struct type specified by name
+    Alloc(&'a str),
+    Update(Box<FastExpr<'a>>, &'a str, Box<FastExpr<'a>>),
+    Lookup(Box<FastExpr<'a>>, &'a str),
+    Unit, // TODO: do we want this to be an expression?
+    ArrayLookup(Box<FastExpr<'a>>, Box<FastExpr<'a>>), // arr[ind] => ArrayLookup(arr, ind)
+    ArrayUpdate(Box<FastExpr<'a>>, Box<FastExpr<'a>>, Box<FastExpr<'a>>), // arr[ind] := new_val => ArrayUpdate(arr, ind, new_val)
+    ArrayAlloc(ExprType, Box<FastExpr<'a>>), // new_arr(<type>, size) => ArrayAlloc(<type>, size)
+    ArrayLen(Box<FastExpr<'a>>),             // arr_len(arr)
+}
+
+#[derive(Debug, Clone)]
+pub enum FastUserFunction<'a> {
+    UserFun(&'a str, FastFunSignature<'a>, FastExpr<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub enum FastUserStruct<'a> {
+    /* UserStruct(type_name, <(t1, field1name, ...)>) */
+    UserStruct(&'a str, FastStructSignature<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub enum FastProg<'a> {
+    Program(Vec<FastUserStruct<'a>>, Vec<FastUserFunction<'a>>, FastExpr<'a>),
+}
+
+/** --- `&str` Based Type Checking --- */
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum FastTypedExpr<'a> {
+    Number(i32),
+    Boolean(bool),
+    Id(ExprType, & 'a str),
+    Let(ExprType, Vec<(& 'a str, FastTypedExpr<'a>)>, Box<FastTypedExpr<'a>>),
+    UnOp(ExprType, Op1, Box<FastTypedExpr<'a>>),
+    BinOp(ExprType, Op2, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>),
+    If(ExprType, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>),
+    RepeatUntil(ExprType, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>),
+    Set(ExprType, & 'a str, Box<FastTypedExpr<'a>>),
+    Block(ExprType, Vec<FastTypedExpr<'a>>),
+    // Function Pointers
+    FunName(ExprType, & 'a str), // (fun_type, fun_name) // fun_type is ret type & expr types
+    Call(ExprType, Box<FastTypedExpr<'a>>, Vec<FastTypedExpr<'a>>), // (return_type, function_name_or_pointer, arguments)
+
+    Input,
+    RDInput,
+    /* --- New to egg-eater --- */
+    Null(ExprType),
+    Alloc(ExprType),
+    Update(ExprType, Box<FastTypedExpr<'a>>, & 'a str, Box<FastTypedExpr<'a>>),
+    Lookup(ExprType, Box<FastTypedExpr<'a>>, & 'a str),
+    /* --- New to bet --- */
+    Unit,
+    ArrayAlloc(ExprType, Box<FastTypedExpr<'a>>), // array pointer
+    ArrayLookup(ExprType, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>), // ArrayLookup(arr::array(t), ind::int)::t
+
+    /// ArrayUpdate(arr::array(t), ind::int, elem::t)::t
+    ArrayUpdate(ExprType, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>, Box<FastTypedExpr<'a>>),
+    ArrayLen(ExprType, Box<FastTypedExpr<'a>>), // ArrayLen(int, Box<array>)
+}
+
+#[derive(Debug, Clone)]
+pub enum FastTypedFunction<'a> {
+    // for use in a program
+    Fun(&'a str, FastFunSignature<'a>, FastTypedExpr<'a>),
+}
+
+#[derive(Clone, Debug)]
+pub enum FastStructLayout<'a> {
+    Layout(HashMap<&'a str, i32>),
+}
+
+#[derive(Debug, Clone)]
+pub enum FastTypedProg<'a> {
+    // everything which will be compiled
+    // structs aren't compiled-- they're reduced to sizes (alloc) and offsets (lookup, update)
+    Program(
+        ExprType,
+        HashMap<&'a str, FastStructSignature<'a>>,
+        HashMap<&'a str, FastStructLayout<'a>>,
+        Vec<FastTypedFunction<'a>>,
+        FastTypedExpr<'a>,
+    ),
 }

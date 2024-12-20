@@ -66,7 +66,7 @@ static KEYWORDS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         /* --- New to eggeater --- */
         "struct", // struct *<name type>: used to declare a new struct type
         "null",   // e: ... | null: a universal pointer type, which can be a pointer to any type
-        "new",  // (new <name>): evaluates to a pointer to a new struct of type <name>
+        "new",    // (new <name>): evaluates to a pointer to a new struct of type <name>
         /* --- New to bet --- */
         "unit",
         "->",
@@ -81,6 +81,10 @@ pub fn is_keyword(id: &str) -> bool {
 /// Returns `.to_string()` argument isn't a reserved keyword (see `is_keyword`)
 pub fn id_to_string(id: &str) -> String {
     return name_to_string(id, NameType::IdName);
+}
+
+pub fn id_to_str<'a>(id: &'a str) -> &'a str {
+    name_to_str(id, NameType::IdName)
 }
 
 pub enum NameType {
@@ -115,6 +119,18 @@ pub fn name_to_string(name: &str, name_type: NameType) -> String {
     }
     name.to_string()
 }
+
+pub fn name_to_str<'a>(name: &'a str, name_type: NameType) -> &'a str {
+    if is_keyword(name) {
+        panic!(
+            "Invalid: {} {} shares name with reserved keyword",
+            name_type_to_str(name_type),
+            name
+        )
+    }
+    name
+}
+
 
 /// Looks up a struct type enumeration and returns the name of the struct.
 pub fn struct_type_enum_to_name(struct_type_enum: i32) -> Option<String> {
@@ -154,7 +170,7 @@ pub fn single_type_str_to_expr_type(name: &str) -> ExprType {
         "unit" => ExprType::Unit,
 
         // non basic type; assume is structname
-        s if is_keyword(s) =>panic!("Invalid type: reserved keyword{:?}", s),
-        _ =>ExprType::StructPointer(struct_name_to_type_enum(&name.to_string())), // TODO STRING
+        s if is_keyword(s) => panic!("Invalid type: reserved keyword{:?}", s),
+        _ => ExprType::StructPointer(struct_name_to_type_enum(&name.to_string())), // TODO STRING
     }
 }
