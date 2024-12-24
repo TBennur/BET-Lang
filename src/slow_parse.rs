@@ -1,5 +1,5 @@
-use crate::slow_lex;
 use crate::semantics::*;
+use crate::slow_lex;
 use crate::stack::*;
 use crate::structs::*;
 use core::panic;
@@ -47,7 +47,7 @@ fn extract_binding(lexpr: Lexpr) -> Result<(String, Lexpr), String> {
     }
 }
 
-fn construct_if(subexprs: Vec<Expr>) -> Expr {
+fn construct_if(subexprs: Vec<Expr>, _state: &mut ()) -> Expr {
     let arr: Result<[Expr; 3], _> = subexprs.try_into();
     match arr {
         Ok(arr) => {
@@ -58,8 +58,8 @@ fn construct_if(subexprs: Vec<Expr>) -> Expr {
     }
 }
 
-impl OneStep<'_, Expr> for Lexpr {
-    fn step(self) -> StepResult<'static, Self, Expr> {
+impl OneStep<'_, Expr, ()> for Lexpr {
+    fn step(self, _: &mut ()) -> StepResult<'static, Self, Expr, ()> {
         match self {
             // atoms
             Atom(I(n)) => match <i32>::try_from(n) {
@@ -94,7 +94,7 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     let new_context = StackState::new(
                         vec![package_lexr_vec(list_contents), index],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() != 2 {
                                 panic!("expected parsed length to have same length as unparsed")
                             }
@@ -126,7 +126,7 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     let new_context = StackState::new(
                         vec![package_lexr_vec(list_contents), index, new_val],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() != 3 {
                                 panic!("expected parsed to have same length as unparsed")
                             }
@@ -161,12 +161,12 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     let type_as_vec = match unparsed_type {
                         List(vec) => vec,
-                        other => vec![other]
+                        other => vec![other],
                     };
 
                     let parsed_type = parse_type(type_as_vec.as_slice());
 
-                    let new_context = StackState::new(vec![unparsed_len], |mut parsed| {
+                    let new_context = StackState::new(vec![unparsed_len], |mut parsed, _| {
                         if parsed.len() != 1 {
                             panic!("expected parsed to have same len as unparsed")
                         }
@@ -185,7 +185,7 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     let unparsed_arr = just_arr.pop().unwrap();
 
-                    let new_context = StackState::new(vec![unparsed_arr], |mut parsed| {
+                    let new_context = StackState::new(vec![unparsed_arr], |mut parsed, _| {
                         if parsed.len() != 1 {
                             panic!("Expected parsed to have the same length as unparsed")
                         }
@@ -233,7 +233,7 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     bound_values.push(scoped_block);
 
-                    let new_context = StackState::new(bound_values, |mut parsed| {
+                    let new_context = StackState::new(bound_values, |mut parsed, _| {
                         let parsed_block = parsed.pop().unwrap();
                         let parsed_bindings: Vec<_> = ids.into_iter().zip(parsed).collect();
                         Expr::Let(parsed_bindings, Box::new(parsed_block))
@@ -268,7 +268,7 @@ impl OneStep<'_, Expr> for Lexpr {
                     list_contents.remove(0); // drop op1
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() != 1 {
                                 unreachable!("we expect parsed to have the same length as unparded")
                             };
@@ -303,7 +303,7 @@ impl OneStep<'_, Expr> for Lexpr {
                     if unparsed.is_empty() {
                         StepResult::Terminal(Expr::Call(Box::new(fun_name.unwrap()), vec![]))
                     } else {
-                        StepResult::Nonterminal(StackState::new(unparsed, |mut parsed| {
+                        StepResult::Nonterminal(StackState::new(unparsed, |mut parsed, _| {
                             match fun_name {
                                 Some(name) => Expr::Call(Box::new(name), parsed),
                                 None => {
@@ -332,7 +332,7 @@ impl OneStep<'_, Expr> for Lexpr {
                     };
                     StepResult::Nonterminal(StackState::new(
                         vec![std::mem::take(lhs), std::mem::take(rhs)],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() == 2 {
                                 let parsed_rhs = parsed.pop().unwrap();
                                 let parsed_lhs = parsed.pop().unwrap();
@@ -359,7 +359,7 @@ impl OneStep<'_, Expr> for Lexpr {
                     let body_block = expect_block(std::mem::take(body_block)).unwrap();
                     StepResult::Nonterminal(StackState::new(
                         vec![body_block, cond],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() == 2 {
                                 let parsed_cond = parsed.pop().unwrap();
                                 let parsed_body = parsed.pop().unwrap();
@@ -388,7 +388,7 @@ impl OneStep<'_, Expr> for Lexpr {
                     let id = id_to_string(&id);
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() == 1 {
                                 let parsed_new_val = parsed.pop().unwrap();
                                 Expr::Set(id, Box::new(parsed_new_val))
@@ -434,7 +434,7 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() == 1 {
                                 let parsed_val = parsed.pop().unwrap();
                                 Expr::Lookup(
@@ -474,7 +474,7 @@ impl OneStep<'_, Expr> for Lexpr {
 
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents), new_val],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() == 2 {
                                 let parsed_new_val = parsed.pop().unwrap();
                                 let parsed_struct_val = parsed.pop().unwrap();
@@ -502,7 +502,7 @@ impl OneStep<'_, Expr> for Lexpr {
                 if exprns.len() == 0 {
                     StepResult::Terminal(Expr::Unit)
                 } else {
-                    let new_context = StackState::new(exprns, Expr::Block);
+                    let new_context = StackState::new(exprns, construct_block);
                     StepResult::Nonterminal(new_context)
                 }
             }
@@ -529,11 +529,15 @@ impl OneStep<'_, Expr> for Lexpr {
     }
 }
 
-fn unwrap_onelem_vec<T>(mut vec: Vec<T>) -> T {
+fn construct_block(vals: Vec<Expr>, _state: &mut ()) -> Expr {
+    Expr::Block(vals)
+}
+
+fn unwrap_onelem_vec<T>(mut vec: Vec<T>, _state: &mut ()) -> T {
     vec.pop().unwrap()
 }
 
-fn neg_unop(mut parsed: Vec<Expr>) -> Expr {
+fn neg_unop(mut parsed: Vec<Expr>, _state: &mut ()) -> Expr {
     if parsed.len() != 1 {
         unreachable!("we expect parsed to have equal length to unparsed, which is 1");
     }
@@ -546,7 +550,9 @@ fn neg_unop(mut parsed: Vec<Expr>) -> Expr {
 }
 
 fn parse_expr(lexpr: Lexpr) -> Expr {
-    IterativeStack::new().iterate(lexpr)
+    let mut state = ();
+    let mut stack: IterativeStack<_, _, ()> = IterativeStack::new(&mut state);
+    stack.iterate(lexpr)
 }
 
 fn expect_block(lexpr: Lexpr) -> Result<Lexpr, String> {
@@ -583,11 +589,9 @@ fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
         [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if arrow == "->" => {
             let parsed_arg_types = arg_types
                 .into_iter()
-                .map(|lexpr| {
-                    match lexpr {
-                        List(vec) => &vec[..],
-                        a => std::slice::from_ref(a),
-                    }
+                .map(|lexpr| match lexpr {
+                    List(vec) => &vec[..],
+                    a => std::slice::from_ref(a),
                 })
                 .map(parse_type)
                 .collect();

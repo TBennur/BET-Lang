@@ -77,7 +77,7 @@ fn extract_binding_str<'a>(lexpr: Lexpr<'a>) -> Result<(&'a str, Lexpr), String>
     }
 }
 
-fn construct_if<'a>(subexprs: Vec<FastExpr<'a>>) -> FastExpr<'a> {
+fn construct_if<'a>(subexprs: Vec<FastExpr<'a>>, _state: &mut ()) -> FastExpr<'a> {
     let arr: Result<[FastExpr<'a>; 3], _> = subexprs.try_into();
     match arr {
         Ok(arr) => {
@@ -88,8 +88,8 @@ fn construct_if<'a>(subexprs: Vec<FastExpr<'a>>) -> FastExpr<'a> {
     }
 }
 
-impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
-    fn step(self) -> StepResult<'a, Self, FastExpr<'a>> {
+impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
+    fn step(self, _: &mut ()) -> StepResult<'b, Self, FastExpr<'a>, ()> {
         match self {
             // atoms
             Atom(I(n)) => match <i32>::try_from(n) {
@@ -124,7 +124,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     let new_context = StackState::new(
                         vec![package_lexr_vec(list_contents), index],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() != 2 {
                                 panic!("expected parsed length to have same length as unparsed")
                             }
@@ -156,7 +156,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     let new_context = StackState::new(
                         vec![package_lexr_vec(list_contents), index, new_val],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() != 3 {
                                 panic!("expected parsed to have same length as unparsed")
                             }
@@ -191,12 +191,12 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     let type_as_vec = match unparsed_type {
                         List(vec) => vec,
-                        other => vec![other]
+                        other => vec![other],
                     };
 
                     let parsed_type = parse_type(type_as_vec.as_slice());
 
-                    let new_context = StackState::new(vec![unparsed_len], |mut parsed| {
+                    let new_context = StackState::new(vec![unparsed_len], |mut parsed, _| {
                         if parsed.len() != 1 {
                             panic!("expected parsed to have same len as unparsed")
                         }
@@ -215,7 +215,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     let unparsed_arr = just_arr.pop().unwrap();
 
-                    let new_context = StackState::new(vec![unparsed_arr], |mut parsed| {
+                    let new_context = StackState::new(vec![unparsed_arr], |mut parsed, _| {
                         if parsed.len() != 1 {
                             panic!("Expected parsed to have the same length as unparsed")
                         }
@@ -263,7 +263,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     bound_values.push(scoped_block);
 
-                    let new_context = StackState::new(bound_values, |mut parsed| {
+                    let new_context = StackState::new(bound_values, |mut parsed, _| {
                         let parsed_block = parsed.pop().unwrap();
                         let parsed_bindings: Vec<_> = ids.into_iter().zip(parsed).collect();
                         FastExpr::Let(parsed_bindings, Box::new(parsed_block))
@@ -272,16 +272,14 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                 }
 
                 // non-alphanum uops
-                [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(uop) => {
-                    match *uop {
-                        "~" => {
-                            let receiver = std::mem::take(receiver);
-                            let new_context = StackState::new(vec![receiver], neg_unop);
-                            StepResult::Nonterminal(new_context)
-                        }
-                        s => panic!("Invalid: Unknown sticky unary operation {:?}", s),
+                [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(uop) => match *uop {
+                    "~" => {
+                        let receiver = std::mem::take(receiver);
+                        let new_context = StackState::new(vec![receiver], neg_unop);
+                        StepResult::Nonterminal(new_context)
                     }
-                }
+                    s => panic!("Invalid: Unknown sticky unary operation {:?}", s),
+                },
 
                 // alphanum unops
                 [Atom(S(op1)), _, ..] if UNOPS.contains(op1) => {
@@ -298,7 +296,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                     list_contents.remove(0); // drop op1
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() != 1 {
                                 unreachable!("we expect parsed to have the same length as unparded")
                             };
@@ -333,7 +331,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                     if unparsed.is_empty() {
                         StepResult::Terminal(FastExpr::Call(Box::new(fun_name.unwrap()), vec![]))
                     } else {
-                        StepResult::Nonterminal(StackState::new(unparsed, |mut parsed| {
+                        StepResult::Nonterminal(StackState::new(unparsed, |mut parsed, _| {
                             match fun_name {
                                 Some(name) => FastExpr::Call(Box::new(name), parsed),
                                 None => {
@@ -362,7 +360,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                     };
                     StepResult::Nonterminal(StackState::new(
                         vec![std::mem::take(lhs), std::mem::take(rhs)],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() == 2 {
                                 let parsed_rhs = parsed.pop().unwrap();
                                 let parsed_lhs = parsed.pop().unwrap();
@@ -389,7 +387,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                     let body_block = expect_block(std::mem::take(body_block)).unwrap();
                     StepResult::Nonterminal(StackState::new(
                         vec![body_block, cond],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() == 2 {
                                 let parsed_cond = parsed.pop().unwrap();
                                 let parsed_body = parsed.pop().unwrap();
@@ -418,7 +416,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                     let id = id_to_str(id);
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        |mut parsed| {
+                        |mut parsed, _| {
                             if parsed.len() == 1 {
                                 let parsed_new_val = parsed.pop().unwrap();
                                 FastExpr::Set(id, Box::new(parsed_new_val))
@@ -464,7 +462,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() == 1 {
                                 let parsed_val = parsed.pop().unwrap();
                                 FastExpr::Lookup(
@@ -504,7 +502,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
 
                     StepResult::Nonterminal(StackState::new(
                         vec![package_lexr_vec(list_contents), new_val],
-                        move |mut parsed| {
+                        move |mut parsed, _| {
                             if parsed.len() == 2 {
                                 let parsed_new_val = parsed.pop().unwrap();
                                 let parsed_struct_val = parsed.pop().unwrap();
@@ -532,7 +530,7 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
                 if exprns.len() == 0 {
                     StepResult::Terminal(FastExpr::Unit)
                 } else {
-                    let new_context = StackState::new(exprns, FastExpr::Block);
+                    let new_context = StackState::new(exprns, |parsed, _| FastExpr::Block(parsed));
                     StepResult::Nonterminal(new_context)
                 }
             }
@@ -559,11 +557,11 @@ impl<'a> OneStep<'a, FastExpr<'a>> for Lexpr<'a> {
     }
 }
 
-fn unwrap_onelem_vec<T>(mut vec: Vec<T>) -> T {
+fn unwrap_onelem_vec<T>(mut vec: Vec<T>, _state: &mut ()) -> T {
     vec.pop().unwrap()
 }
 
-fn neg_unop<'a>(mut parsed: Vec<FastExpr<'a>>) -> FastExpr<'a> {
+fn neg_unop<'a>(mut parsed: Vec<FastExpr<'a>>, _state: &mut ()) -> FastExpr<'a> {
     if parsed.len() != 1 {
         unreachable!("we expect parsed to have equal length to unparsed, which is 1");
     }
@@ -576,7 +574,9 @@ fn neg_unop<'a>(mut parsed: Vec<FastExpr<'a>>) -> FastExpr<'a> {
 }
 
 fn parse_expr<'a>(lexpr: Lexpr<'a>) -> FastExpr<'a> {
-    IterativeStack::new().iterate(lexpr)
+    let mut state = ();
+    let mut stack: IterativeStack<_, _, ()> = IterativeStack::new(&mut state);
+    stack.iterate(lexpr)
 }
 
 fn expect_block(lexpr: Lexpr) -> Result<Lexpr, String> {
@@ -613,11 +613,9 @@ fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
         [ParenList(arg_types), Atom(S(arrow)), ret_type @ ..] if *arrow == "->" => {
             let parsed_arg_types = arg_types
                 .into_iter()
-                .map(|lexpr| {
-                    match lexpr {
-                        List(vec) => &vec[..],
-                        a => std::slice::from_ref(a),
-                    }
+                .map(|lexpr| match lexpr {
+                    List(vec) => &vec[..],
+                    a => std::slice::from_ref(a),
                 })
                 .map(parse_type)
                 .collect();
@@ -657,7 +655,10 @@ fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, 
     }
 }
 
-fn parse_type_annotated_name_str<'a>(defn: &Lexpr, name_and_type: &'a Lexpr) -> (ExprType, &'a str) {
+fn parse_type_annotated_name_str<'a>(
+    defn: &Lexpr,
+    name_and_type: &'a Lexpr,
+) -> (ExprType, &'a str) {
     let name_and_type = match name_and_type {
         List(_name_and_type) => _name_and_type,
         _ => panic!(
@@ -684,7 +685,6 @@ fn parse_type_annotated_name_str<'a>(defn: &Lexpr, name_and_type: &'a Lexpr) -> 
         ),
     }
 }
-
 
 fn parse_struct_def<'a>(s: &'a Lexpr<'a>) -> Option<FastUserStruct<'a>> {
     let decl = match s {
