@@ -17,36 +17,6 @@ fn package_lexr_vec<'a>(mut s: Vec<Lexpr<'a>>) -> Lexpr<'a> {
     }
 }
 
-fn extract_binding(lexpr: Lexpr) -> Result<(String, Lexpr), String> {
-    let mut tokens = match lexpr {
-        List(tokens) => tokens,
-        _ => panic!("Bindings must be a List of tokens, {:?}", lexpr),
-    };
-
-    if tokens.len() < 3 {
-        // need at least vec!["id", ":=", lexpr]
-        panic!("Bad binding, {:?}", tokens)
-    }
-
-    let (id, walrus) = {
-        let mut drained = tokens.drain(0..=1);
-        let id = drained.next().unwrap();
-        let walrus = drained.next().unwrap();
-        (id, walrus)
-        // drop drain
-    };
-
-    match (id, walrus) {
-        (Atom(S(id)), Atom(S(walrus))) if walrus == ":=" => {
-            Ok((id_to_string(&id), package_lexr_vec(tokens)))
-        }
-        (id, walrus) => Err(format!(
-            "Not a valid binding: {:?}, {:?}, {:?}",
-            id, walrus, tokens
-        )),
-    }
-}
-
 fn extract_binding_str<'a>(lexpr: Lexpr<'a>) -> Result<(&'a str, Lexpr), String> {
     let mut tokens = match lexpr {
         List(tokens) => tokens,
@@ -624,34 +594,6 @@ fn parse_type(type_annotation: &[Lexpr]) -> ExprType {
         }
 
         _ => panic!("Invalid type annotation: {:?}", type_annotation),
-    }
-}
-
-fn parse_type_annotated_name(defn: &Lexpr, name_and_type: &Lexpr) -> (ExprType, String) {
-    let name_and_type = match name_and_type {
-        List(_name_and_type) => _name_and_type,
-        _ => panic!(
-            "Invalid: Improperly formed type annotation {:?} in {:?}",
-            name_and_type, defn
-        ),
-    };
-
-    match &name_and_type[..] {
-        // single type
-        [Atom(S(field_name)), Atom(S(type_anotation)), field_type @ ..]
-            if *type_anotation == "::" =>
-        {
-            // Will check field isn't a duplicate in type-check
-            (
-                parse_type(field_type),
-                name_to_string(&field_name, NameType::StructFieldName), // panics if keyword
-            )
-        }
-
-        _ => panic!(
-            "Invalid: Improperly formed type annotation {:?} in {:?}",
-            name_and_type, defn
-        ),
     }
 }
 
