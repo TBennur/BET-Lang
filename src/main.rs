@@ -1,3 +1,7 @@
+mod alt_parse;
+mod alt_stack;
+mod alt_stack_variants;
+mod parse_shared;
 mod compile;
 mod consts;
 mod fast_lex;
@@ -18,7 +22,7 @@ use std::io::prelude::*;
 
 use compile::compile_prog;
 use optimize::optimize_prog;
-use parse::parse_prog;
+use parse_shared::parse_prog;
 
 fn main() -> std::io::Result<()> {
     // parse args
@@ -37,9 +41,15 @@ fn main() -> std::io::Result<()> {
     let mut bet_fast_lexed = fast_lex::Lexer::default().lex_fast(&buf);
     println!("lexed in {}", start.elapsed().as_millis());
 
+    let mut dup_lexted = fast_lex::Lexer::default().lex_fast(&buf);
+
     // parse
     start = std::time::Instant::now();
-    let bet_prog = parse_prog(&mut bet_fast_lexed);
+    let bet_prog = parse_prog(&mut bet_fast_lexed, parse_shared::Variant::Old);
+    println!("parsed in {}", start.elapsed().as_millis());
+
+    start = std::time::Instant::now();
+    let bet_prog_alt = parse_prog(&mut dup_lexted, parse_shared::Variant::Alt);
     println!("parsed in {}", start.elapsed().as_millis());
 
     // type check

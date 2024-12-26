@@ -16,6 +16,11 @@ pub enum ExprType {
     FunctionPointer(Vec<ExprType>, Box<ExprType>), // arg types, then ret type
     Array(Box<ExprType>),
 }
+impl Default for ExprType {
+    fn default() -> Self {
+        ExprType::StructPointer(-1)
+    }
+}
 
 impl fmt::Debug for ExprType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -144,9 +149,7 @@ impl<'a> FastTypedExpr<'a> {
 impl ExprType {
     pub fn is_base(&self) -> Option<FastExprType> {
         match self {
-            ExprType::Int => {
-                Some(FastExprType::Int)
-            }
+            ExprType::Int => Some(FastExprType::Int),
             ExprType::Bool => Some(FastExprType::Bool),
             ExprType::Unit => Some(FastExprType::Unit),
             _ => None,
@@ -371,6 +374,16 @@ pub enum Instr {
 pub enum FastFunSignature<'a> {
     // to insert into function signature hashmap, for type_check_expr
     Sig(ExprType, Vec<(ExprType, &'a str)>),
+}
+
+impl<'a> FastFunSignature<'a> {
+    pub fn get_ptr_type(&self) -> ExprType {
+        let FastFunSignature::Sig(ret_type, params) = self;
+        ExprType::FunctionPointer(
+            params.iter().map(|(t, _s)| t.clone()).collect(),
+            Box::new(ret_type.clone()),
+        )
+    }
 }
 
 #[derive(Clone, Debug)]

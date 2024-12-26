@@ -1,12 +1,187 @@
-use crate::lex;
+use crate::alt_stack::*;
+use crate::alt_stack_variants::{Constructor, SimpleStackState};
+use crate::lex::{
+    Atom::{F, I, S},
+    Lexpr,
+    Lexpr::{Atom, BraceList, CurlyList, List, ParenList},
+};
 use crate::parse_shared::{expect_block, parse_type};
 use crate::semantics::*;
-use crate::stack::*;
 use crate::structs::*;
 use core::panic;
-use lex::Atom::{F, I, S};
-use lex::Lexpr;
-use lex::Lexpr::{Atom, BraceList, CurlyList, List, ParenList};
+
+type ParseState<'a> = SimpleStackState<Lexpr<'a>, FastExpr<'a>, FexprConstructor<'a>>;
+
+enum FexprConstructor<'a> {
+    Let(Vec<&'a str>),
+    UnOp(Op1),
+    BinOp(Op2),
+    If,
+    RepeatUntil,
+    Set(&'a str),
+    Block,
+    Call(Option<&'a str>),
+    Update(&'a str),
+    Lookup(&'a str),
+    ArrayLookup,
+    ArrayUpdate,          // arr[ind] := new_val => ArrayUpdate(arr, ind, new_val)
+    ArrayAlloc(ExprType), // new_arr(<type>, size) => ArrayAlloc(<type>, size)
+    ArrayLen,             // arr_len(arr)
+    NegUopp,
+    WrappingParens,
+}
+
+impl<'a> Constructor<FastExpr<'a>> for FexprConstructor<'a> {
+    fn construct(&mut self, parsed: &mut Vec<FastExpr<'a>>) -> FastExpr<'a> {
+        match self {
+            FexprConstructor::ArrayLookup => {
+                if parsed.len() != 2 {
+                    panic!("expected parsed length to have same length as unparsed")
+                }
+                let parsed_ind = parsed.pop().unwrap();
+                let parsed_arr = parsed.pop().unwrap();
+                FastExpr::ArrayLookup(Box::new(parsed_arr), Box::new(parsed_ind))
+            }
+            FexprConstructor::ArrayUpdate => {
+                if parsed.len() != 3 {
+                    panic!("expected parsed to have same length as unparsed")
+                }
+                let parsed_new_val = parsed.pop().unwrap();
+                let parsed_index = parsed.pop().unwrap();
+                let parsed_arr = parsed.pop().unwrap();
+
+                FastExpr::ArrayUpdate(
+                    Box::new(parsed_arr),
+                    Box::new(parsed_index),
+                    Box::new(parsed_new_val),
+                )
+            }
+            FexprConstructor::ArrayAlloc(parsed_type) => {
+                if parsed.len() != 1 {
+                    panic!("expected parsed to have same len as unparsed")
+                }
+
+                let parsed_len = parsed.pop().unwrap();
+                FastExpr::ArrayAlloc(std::mem::take(parsed_type), Box::new(parsed_len))
+            }
+            FexprConstructor::ArrayLen => {
+                if parsed.len() != 1 {
+                    panic!("Expected parsed to have the same length as unparsed")
+                }
+                FastExpr::ArrayLen(Box::new(parsed.pop().unwrap()))
+            }
+            FexprConstructor::If => {
+                let arr: Result<[FastExpr<'a>; 3], _> = std::mem::take(parsed).try_into();
+                match arr {
+                    Ok(arr) => {
+                        let [cond, if_true, if_false] = arr;
+                        FastExpr::If(Box::new(cond), Box::new(if_true), Box::new(if_false))
+                    }
+                    Err(err) => unreachable!("invalid arg to constructor {:?}", err),
+                }
+            }
+            FexprConstructor::Let(ids) => {
+                let parsed_block = parsed.pop().unwrap();
+                let parsed_bindings: Vec<_> = ids
+                    .into_iter()
+                    .map(|s| *s)
+                    .zip(std::mem::take(parsed))
+                    .collect();
+                FastExpr::Let(parsed_bindings, Box::new(parsed_block))
+            }
+            FexprConstructor::NegUopp => {
+                if parsed.len() != 1 {
+                    unreachable!("we expect parsed to have equal length to unparsed, which is 1");
+                }
+
+                let parsed = parsed.pop().unwrap();
+                match parsed {
+                    FastExpr::Number(x) => FastExpr::Number(-x),
+                    _ => unimplemented!(), // unary negation not yet implemented for anything other than string literals
+                }
+            }
+            FexprConstructor::UnOp(uop_type) => {
+                if parsed.len() != 1 {
+                    unreachable!("we expect parsed to have the same length as unparded")
+                };
+                let parsed = parsed.pop().unwrap();
+
+                FastExpr::UnOp(*uop_type, Box::new(parsed))
+            }
+            FexprConstructor::Call(name) => {
+                let parsed_ptr = match name {
+                    Some(checked_name) => FastExpr::FunName(*checked_name),
+                    None => parsed.pop().unwrap(), // no name; pointer is last thing parsed
+                };
+                FastExpr::Call(Box::new(parsed_ptr), std::mem::take(parsed))
+            }
+            FexprConstructor::BinOp(binop) => {
+                if parsed.len() == 2 {
+                    let parsed_rhs = parsed.pop().unwrap();
+                    let parsed_lhs = parsed.pop().unwrap();
+                    FastExpr::BinOp(*binop, Box::new(parsed_lhs), Box::new(parsed_rhs))
+                } else {
+                    panic!("expected to get same number of parsed as unparsed")
+                }
+            }
+            FexprConstructor::RepeatUntil => {
+                if parsed.len() == 2 {
+                    let parsed_cond = parsed.pop().unwrap();
+                    let parsed_body = parsed.pop().unwrap();
+                    FastExpr::RepeatUntil(Box::new(parsed_body), Box::new(parsed_cond))
+                } else {
+                    panic!("expected to get same number of parsed as unparsed")
+                }
+            }
+            FexprConstructor::Set(id) => {
+                if parsed.len() == 1 {
+                    let parsed_new_val = parsed.pop().unwrap();
+                    FastExpr::Set(*id, Box::new(parsed_new_val))
+                } else {
+                    panic!("expected to get same number of parsed as unparsed")
+                }
+            }
+            FexprConstructor::Lookup(field_name) => {
+                if parsed.len() == 1 {
+                    let parsed_val = parsed.pop().unwrap();
+                    FastExpr::Lookup(
+                        Box::new(parsed_val),
+                        name_to_str(field_name, NameType::StructFieldName),
+                    )
+                } else {
+                    panic!("expected to get same number of parsed as unparsed")
+                }
+            }
+            FexprConstructor::Update(field_name) => {
+                if parsed.len() == 2 {
+                    let parsed_new_val = parsed.pop().unwrap();
+                    let parsed_struct_val = parsed.pop().unwrap();
+                    FastExpr::Update(
+                        Box::new(parsed_struct_val),
+                        name_to_str(&field_name, NameType::StructFieldName),
+                        Box::new(parsed_new_val),
+                    )
+                } else {
+                    panic!("expected to get same number of parsed as unparsed")
+                }
+            }
+            FexprConstructor::Block => FastExpr::Block(std::mem::take(parsed)),
+            FexprConstructor::WrappingParens => {
+                assert!(parsed.len() == 1);
+                parsed.pop().unwrap()
+            }
+        }
+    }
+}
+
+fn is_wrapped_expr_non_kword(lexpr: &Lexpr) -> bool {
+    match lexpr {
+        Atom(S(s)) => !is_keyword(s),
+        CurlyList(_) => true,
+        ParenList(_) => true,
+        _ => false,
+    }
+}
 
 fn package_lexr_vec<'a>(mut s: Vec<Lexpr<'a>>) -> Lexpr<'a> {
     if s.len() == 0 {
@@ -48,19 +223,8 @@ fn extract_binding_str<'a>(lexpr: Lexpr<'a>) -> Result<(&'a str, Lexpr), String>
     }
 }
 
-fn construct_if<'a>(subexprs: Vec<FastExpr<'a>>, _state: &mut ()) -> FastExpr<'a> {
-    let arr: Result<[FastExpr<'a>; 3], _> = subexprs.try_into();
-    match arr {
-        Ok(arr) => {
-            let [cond, if_true, if_false] = arr;
-            FastExpr::If(Box::new(cond), Box::new(if_true), Box::new(if_false))
-        }
-        Err(err) => unreachable!("invalid arg to constructor {:?}", err),
-    }
-}
-
-impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
-    fn step(self, _: &mut ()) -> StepResult<'b, Self, FastExpr<'a>, ()> {
+impl<'a: 'b, 'b> crate::alt_stack::OneStep<(), ParseState<'a>> for Lexpr<'a> {
+    fn step(self, _stack_state: &mut ()) -> StepResult<FastExpr<'a>, ParseState<'a>> {
         match self {
             // atoms
             Atom(I(n)) => match <i32>::try_from(n) {
@@ -93,19 +257,10 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                         _ => unreachable!(),
                     };
 
-                    let new_context = StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![package_lexr_vec(list_contents), index],
-                        |mut parsed, _| {
-                            if parsed.len() != 2 {
-                                panic!("expected parsed length to have same length as unparsed")
-                            }
-                            let parsed_ind = parsed.pop().unwrap();
-                            let parsed_arr = parsed.pop().unwrap();
-                            FastExpr::ArrayLookup(Box::new(parsed_arr), Box::new(parsed_ind))
-                        },
-                    );
-
-                    StepResult::Nonterminal(new_context)
+                        FexprConstructor::ArrayLookup,
+                    ))
                 }
 
                 // array update: arr[ind] := (new_val)
@@ -125,25 +280,10 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                         _ => unreachable!(),
                     };
 
-                    let new_context = StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![package_lexr_vec(list_contents), index, new_val],
-                        |mut parsed, _| {
-                            if parsed.len() != 3 {
-                                panic!("expected parsed to have same length as unparsed")
-                            }
-                            let parsed_new_val = parsed.pop().unwrap();
-                            let parsed_index = parsed.pop().unwrap();
-                            let parsed_arr = parsed.pop().unwrap();
-
-                            FastExpr::ArrayUpdate(
-                                Box::new(parsed_arr),
-                                Box::new(parsed_index),
-                                Box::new(parsed_new_val),
-                            )
-                        },
-                    );
-
-                    StepResult::Nonterminal(new_context)
+                        FexprConstructor::ArrayUpdate,
+                    ))
                 }
 
                 // array allocation: new_arr(<type>, len)
@@ -167,33 +307,21 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
 
                     let parsed_type = parse_type(type_as_vec.as_slice());
 
-                    let new_context = StackState::new(vec![unparsed_len], |mut parsed, _| {
-                        if parsed.len() != 1 {
-                            panic!("expected parsed to have same len as unparsed")
-                        }
-
-                        let parsed_len = parsed.pop().unwrap();
-                        FastExpr::ArrayAlloc(parsed_type, Box::new(parsed_len))
-                    });
-
-                    StepResult::Nonterminal(new_context)
+                    StepResult::Nonterminal(SimpleStackState::new(
+                        vec![unparsed_len],
+                        FexprConstructor::ArrayAlloc(parsed_type),
+                    ))
                 }
 
                 [Atom(S(len_kwd)), ParenList(just_arr)] if *len_kwd == "arr_len" => {
                     if just_arr.len() != 1 {
                         panic!("arr_len keyword operates on a single array")
                     }
-
                     let unparsed_arr = just_arr.pop().unwrap();
-
-                    let new_context = StackState::new(vec![unparsed_arr], |mut parsed, _| {
-                        if parsed.len() != 1 {
-                            panic!("Expected parsed to have the same length as unparsed")
-                        }
-                        FastExpr::ArrayLen(Box::new(parsed.pop().unwrap()))
-                    });
-
-                    StepResult::Nonterminal(new_context)
+                    StepResult::Nonterminal(SimpleStackState::new(
+                        vec![unparsed_arr],
+                        FexprConstructor::ArrayLen,
+                    ))
                 }
 
                 [Atom(S(if_kwd)), ParenList(cond_vec), true_block, Atom(S(else_kwd)), false_block]
@@ -209,15 +337,14 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
 
                     let cond = cond_vec.pop().unwrap();
 
-                    let new_context = StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![
                             cond,
                             std::mem::take(true_block),
                             std::mem::take(false_block),
                         ],
-                        construct_if,
-                    );
-                    StepResult::Nonterminal(new_context)
+                        FexprConstructor::If,
+                    ))
                 }
 
                 [Atom(S(keyword)), ParenList(bindings), scoped_block] if *keyword == "let" => {
@@ -234,11 +361,8 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
 
                     bound_values.push(scoped_block);
 
-                    let new_context = StackState::new(bound_values, |mut parsed, _| {
-                        let parsed_block = parsed.pop().unwrap();
-                        let parsed_bindings: Vec<_> = ids.into_iter().zip(parsed).collect();
-                        FastExpr::Let(parsed_bindings, Box::new(parsed_block))
-                    });
+                    let new_context =
+                        SimpleStackState::new(bound_values, FexprConstructor::Let(ids));
                     StepResult::Nonterminal(new_context)
                 }
 
@@ -246,8 +370,10 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                 [Atom(S(uop)), receiver] if STICKY_UNOPS.contains(uop) => match *uop {
                     "~" => {
                         let receiver = std::mem::take(receiver);
-                        let new_context = StackState::new(vec![receiver], neg_unop);
-                        StepResult::Nonterminal(new_context)
+                        StepResult::Nonterminal(SimpleStackState::new(
+                            vec![receiver],
+                            FexprConstructor::NegUopp,
+                        ))
                     }
                     s => panic!("Invalid: Unknown sticky unary operation {:?}", s),
                 },
@@ -265,16 +391,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                     };
 
                     list_contents.remove(0); // drop op1
-                    StepResult::Nonterminal(StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        move |mut parsed, _| {
-                            if parsed.len() != 1 {
-                                unreachable!("we expect parsed to have the same length as unparded")
-                            };
-                            let parsed = parsed.pop().unwrap();
-
-                            FastExpr::UnOp(uop_type, Box::new(parsed))
-                        },
+                        FexprConstructor::UnOp(uop_type),
                     ))
                 }
 
@@ -286,31 +405,27 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                     let fn_name_or_ptr = std::mem::take(fn_name_or_ptr);
 
                     let fun_name = match &fn_name_or_ptr {
-                        Atom(S(fun_name)) => {
-                            Some(FastExpr::FunName(name_to_str(fun_name, NameType::FunName)))
-                        }
+                        Atom(S(fun_name)) => Some(name_to_str(fun_name, NameType::FunName)),
                         _lexpr => None,
                     };
 
-                    let unparsed = match fun_name {
-                        Some(_) => fun_args,
-                        None => {
+                    let unparsed = {
+                        if let None = fun_name {
                             fun_args.push(fn_name_or_ptr); // need to parse fun pointer
-                            fun_args
                         }
+                        fun_args
                     };
+
                     if unparsed.is_empty() {
-                        StepResult::Terminal(FastExpr::Call(Box::new(fun_name.unwrap()), vec![]))
+                        StepResult::Terminal(FastExpr::Call(
+                            Box::new(FastExpr::FunName(fun_name.unwrap())),
+                            vec![],
+                        ))
                     } else {
-                        StepResult::Nonterminal(StackState::new(unparsed, |mut parsed, _| {
-                            match fun_name {
-                                Some(name) => FastExpr::Call(Box::new(name), parsed),
-                                None => {
-                                    let parsed_ptr = parsed.pop().unwrap();
-                                    FastExpr::Call(Box::new(parsed_ptr), parsed)
-                                }
-                            }
-                        }))
+                        StepResult::Nonterminal(SimpleStackState::new(
+                            unparsed,
+                            FexprConstructor::Call(fun_name),
+                        ))
                     }
                 }
 
@@ -329,17 +444,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                         "&&" => Op2::And,
                         s => panic!("Invalid: Unknown binary operation {:?}", s),
                     };
-                    StepResult::Nonterminal(StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![std::mem::take(lhs), std::mem::take(rhs)],
-                        move |mut parsed, _| {
-                            if parsed.len() == 2 {
-                                let parsed_rhs = parsed.pop().unwrap();
-                                let parsed_lhs = parsed.pop().unwrap();
-                                FastExpr::BinOp(binop, Box::new(parsed_lhs), Box::new(parsed_rhs))
-                            } else {
-                                panic!("expected to get same number of parsed as unparsed")
-                            }
-                        },
+                        FexprConstructor::BinOp(binop),
                     ))
                 }
 
@@ -356,17 +463,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
 
                     let cond = cond.pop().unwrap();
                     let body_block = expect_block(std::mem::take(body_block)).unwrap();
-                    StepResult::Nonterminal(StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![body_block, cond],
-                        |mut parsed, _| {
-                            if parsed.len() == 2 {
-                                let parsed_cond = parsed.pop().unwrap();
-                                let parsed_body = parsed.pop().unwrap();
-                                FastExpr::RepeatUntil(Box::new(parsed_body), Box::new(parsed_cond))
-                            } else {
-                                panic!("expected to get same number of parsed as unparsed")
-                            }
-                        },
+                        FexprConstructor::RepeatUntil,
                     ))
                 }
 
@@ -385,16 +484,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                     };
 
                     let id = id_to_str(id);
-                    StepResult::Nonterminal(StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        |mut parsed, _| {
-                            if parsed.len() == 1 {
-                                let parsed_new_val = parsed.pop().unwrap();
-                                FastExpr::Set(id, Box::new(parsed_new_val))
-                            } else {
-                                panic!("expected to get same number of parsed as unparsed")
-                            }
-                        },
+                        FexprConstructor::Set(id),
                     ))
                 }
 
@@ -431,19 +523,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                         field_name // keep field_name
                     };
 
-                    StepResult::Nonterminal(StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![package_lexr_vec(list_contents)],
-                        move |mut parsed, _| {
-                            if parsed.len() == 1 {
-                                let parsed_val = parsed.pop().unwrap();
-                                FastExpr::Lookup(
-                                    Box::new(parsed_val),
-                                    name_to_str(field_name, NameType::StructFieldName),
-                                )
-                            } else {
-                                panic!("expected to get same number of parsed as unparsed")
-                            }
-                        },
+                        FexprConstructor::Lookup(field_name),
                     ))
                 }
 
@@ -471,21 +553,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                         (field_name, new_val)
                     };
 
-                    StepResult::Nonterminal(StackState::new(
+                    StepResult::Nonterminal(SimpleStackState::new(
                         vec![package_lexr_vec(list_contents), new_val],
-                        move |mut parsed, _| {
-                            if parsed.len() == 2 {
-                                let parsed_new_val = parsed.pop().unwrap();
-                                let parsed_struct_val = parsed.pop().unwrap();
-                                FastExpr::Update(
-                                    Box::new(parsed_struct_val),
-                                    name_to_str(&field_name, NameType::StructFieldName),
-                                    Box::new(parsed_new_val),
-                                )
-                            } else {
-                                panic!("expected to get same number of parsed as unparsed")
-                            }
-                        },
+                        FexprConstructor::Update(field_name),
                     ))
                 }
                 [] => StepResult::Terminal(FastExpr::Unit), // empty List is unit
@@ -501,19 +571,18 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
                 if exprns.len() == 0 {
                     StepResult::Terminal(FastExpr::Unit)
                 } else {
-                    let new_context = StackState::new(exprns, |parsed, _| FastExpr::Block(parsed));
-                    StepResult::Nonterminal(new_context)
+                    StepResult::Nonterminal(SimpleStackState::new(exprns, FexprConstructor::Block))
                 }
             }
 
             // ParenList: a sequence of lexprs which were wrapped in parens
             // at this point, we only expect there to be one element-- these parens only exist for lexing / are additional parens-- or none, which indicates unit
-            ParenList(mut vec) => {
+            ParenList(vec) => {
                 match vec.len().cmp(&1) {
                     std::cmp::Ordering::Less => StepResult::Terminal(FastExpr::Unit), // zero
-                    std::cmp::Ordering::Equal => StepResult::Nonterminal(StackState::new(
-                        vec![vec.pop().unwrap()],
-                        unwrap_onelem_vec,
+                    std::cmp::Ordering::Equal => StepResult::Nonterminal(SimpleStackState::new(
+                        vec,
+                        FexprConstructor::WrappingParens,
                     )), // TODO: TEST
                     std::cmp::Ordering::Greater => panic!("Invalid parens: {:?}.", vec),
                 }
@@ -528,33 +597,9 @@ impl<'a: 'b, 'b> OneStep<'b, FastExpr<'a>, ()> for Lexpr<'a> {
     }
 }
 
-fn unwrap_onelem_vec<T>(mut vec: Vec<T>, _state: &mut ()) -> T {
-    vec.pop().unwrap()
-}
-
-fn neg_unop<'a>(mut parsed: Vec<FastExpr<'a>>, _state: &mut ()) -> FastExpr<'a> {
-    if parsed.len() != 1 {
-        unreachable!("we expect parsed to have equal length to unparsed, which is 1");
-    }
-
-    let parsed = parsed.pop().unwrap();
-    match parsed {
-        FastExpr::Number(x) => FastExpr::Number(-x),
-        _ => unimplemented!(), // unary negation not yet implemented for anything other than string literals
-    }
-}
-
-pub fn parse_expr_old<'a>(lexpr: Lexpr<'a>) -> FastExpr<'a> {
+pub fn alt_parse_expr<'a>(lexpr: Lexpr<'a>) -> FastExpr<'a> {
     let mut state = ();
-    let mut stack: IterativeStack<_, _, ()> = IterativeStack::new(&mut state);
+    let mut stack: crate::alt_stack::IterativeStack<ParseState, ()> =
+        crate::alt_stack::IterativeStack::new(&mut state);
     stack.iterate(lexpr)
-}
-
-fn is_wrapped_expr_non_kword(lexpr: &Lexpr) -> bool {
-    match lexpr {
-        Atom(S(s)) => !is_keyword(s),
-        CurlyList(_) => true,
-        ParenList(_) => true,
-        _ => false,
-    }
 }

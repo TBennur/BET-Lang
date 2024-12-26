@@ -305,8 +305,8 @@ struct WrappedFastExpr<'a, 'b> {
     type_bindings: im::HashMap<&'a str, FastExprType>, // changes, not shared
 
     struct_hm: &'b im::HashMap<&'a str, i32>,
-    function_sigs: &'b im::HashMap<&'a str, FastFunSignature<'a>>, // unchanging
-    struct_sigs: &'b im::HashMap<&'a str, FastStructSignature<'a>>, // unchanging
+    function_sigs: &'b im::HashMap<&'a str, (FastFunSignature<'a>, ExprType)>, // unchanging; maps function name to tuple of (Sig, PtrType)
+    struct_sigs: &'b im::HashMap<&'a str, FastStructSignature<'a>>,            // unchanging
     allow_input: bool,
 }
 
@@ -432,20 +432,9 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
 
             FastExpr::Id(id) => match self.function_sigs.get(&id) {
                 // first, check for function names (which resolve to function pointers)
-                Some(FastFunSignature::Sig(ret_type, param_types)) => {
-                    let expr_type = ExprType::FunctionPointer(
-                        param_types
-                            .into_iter()
-                            .map(
-                                |(field_type, _field_name)| field_type.to_owned(), // TODO CLONE
-                            )
-                            .collect(),
-                        Box::new(ret_type.clone()), // TODO CLONE
-                    );
-                    StepResult::Terminal(
-                        FastTypedExpr::FunName(state.ingest(expr_type).0, id).check_type(expected),
-                    )
-                }
+                Some((_sig, ptr_type)) => StepResult::Terminal(
+                    FastTypedExpr::FunName(state.ingest_clone(ptr_type), id).check_type(expected),
+                ),
 
                 // next, check for variables
                 None => match self.type_bindings.get(id) {
@@ -460,18 +449,8 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
 
             FastExpr::FunName(fun_name) => match self.function_sigs.get(fun_name) {
                 // check global functions first
-                Some(f_sig) => {
-                    let FastFunSignature::Sig(return_type, param_types) = f_sig;
-
-                    let param_types: Vec<ExprType> = param_types
-                        .into_iter()
-                        .map(|(param_type, _param_name)| param_type.to_owned()) // TODO CLONE
-                        .collect();
-
-                    let fn_ptr_type =
-                        ExprType::FunctionPointer(param_types, Box::new(return_type.clone()));
-
-                    let fast_ptr_type = state.ingest(fn_ptr_type).0;
+                Some((_sig, ptr_type)) => {
+                    let fast_ptr_type = state.ingest_clone(ptr_type);
 
                     StepResult::Terminal(
                         FastTypedExpr::FunName(fast_ptr_type, fun_name).check_type(expected),
@@ -569,7 +548,8 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                             Box::new(typed_expr),
                         ),
                     }
-                }))
+                }.check_type(expected)
+            ))
             }
 
             FastExpr::Set(name, new_value) => {
@@ -601,7 +581,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         let t1_prime = typed.pop().unwrap();
 
                         FastTypedExpr::Set(t1, name, Box::new(t1_prime))
-                    },
+                    }.check_type(expected),
                 ))
             }
 
@@ -655,7 +635,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                             typed_bindings,
                             Box::new(body_texpr),
                         )
-                    },
+                    }.check_type(expected),
                     move |temp, _passed_state| {
                         if let Some(id) = cloned_ids.pop() {
                             let fast_expr_type = temp.extract_type();
@@ -724,7 +704,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                                 Box::new(a_typed),
                                 Box::new(b_typed),
                             )
-                        },
+                        }.check_type(expected),
                         move |typed, _state| match b_vec.pop() {
                             Some(b) => Some(WrappedFastExpr {
                                 fast_expr: b,
@@ -786,7 +766,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                                 Box::new(a_typed),
                                 Box::new(b_typed),
                             )
-                        },
+                        }.check_type(expected),
                     ))
                 }
             },
@@ -806,7 +786,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         struct_sigs: self.struct_sigs,
                         allow_input: self.allow_input,
                     }],
-                    |mut typed, _| {
+                    move |mut typed, _| {
                         assert!(typed.len() == 3); // cond t_branch f_branch
                         let f_branch: FastTypedExpr = typed.pop().unwrap();
                         let t_branch = typed.pop().unwrap();
@@ -817,7 +797,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                             Box::new(t_branch),
                             Box::new(f_branch),
                         )
-                    },
+                    }.check_type(expected),
                     move |typed: &FastTypedExpr, _: &mut TypeCheckState| {
                         match untyped.pop() {
                             None => None, // done (will construct)
@@ -866,7 +846,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         allow_input: self.allow_input,
                     },
                 ],
-                |mut typed, _| {
+                move |mut typed, _| {
                     assert_eq!(typed.len(), 2);
                     let typed_body: FastTypedExpr = typed.pop().unwrap();
                     let typed_stop_cond = typed.pop().unwrap();
@@ -875,7 +855,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         Box::new(typed_body),
                         Box::new(typed_stop_cond),
                     )
-                },
+                }.check_type(expected),
             )),
 
             FastExpr::Block(expns) => {
@@ -910,7 +890,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         };
 
                         FastTypedExpr::Block(block_type, typed)
-                    },
+                    }.check_type(expected),
                 ))
             }
 
@@ -936,6 +916,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         assert!(typed.len() == arg_len + 1); // all args + fn ptr
                         let typed_fun_ptr: FastTypedExpr = typed.remove(0); // TODO POP FRONT
                         let ret_type =
+                            // can clean this up; and we never expect to need to clone here, as when creating the function type we should've ingested the ret type
                             match state_plus.to_expr_type_ref(typed_fun_ptr.extract_type()) {
                                 Some(ExprType::FunctionPointer(_, ret_type)) => *ret_type.clone(),
                                 _ => unreachable!("should have panicked earlier"),
@@ -943,7 +924,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         let fast_ret_type = state_plus.ingest(ret_type).0; // TODO CLONE
 
                         FastTypedExpr::Call(fast_ret_type, Box::new(typed_fun_ptr), typed)
-                    },
+                    }.check_type(expected),
                     move |produced, state: &mut TypeCheckState| {
                         // the first produced is the function pointer, which dictates the type and number of arguments
                         if !ptr_checked {
@@ -993,7 +974,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                     vec![
                         self.split_child(*pointer, ExpectedType::Any), // must check that it has pointer type
                     ],
-                    |mut typed, _state| {
+                    move |mut typed, _state| {
                         assert!(
                             typed.len() == 2,
                             "expected length 2 but got {}",
@@ -1007,7 +988,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                             field_name,
                             Box::new(new_val_typed),
                         )
-                    },
+                    }.check_type(expected),
                     move |typed: &FastTypedExpr<'a>, state: &mut TypeCheckState| {
                         match parse_next.pop() {
                             Some(new_value) => {
@@ -1110,7 +1091,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                             Box::new(typed_pointer),
                             field_name,
                         )
-                    },
+                    }.check_type(expected),
                 ))
             }
 
@@ -1119,7 +1100,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                     self.split_child(*arr, ExpectedType::Any),
                     self.split_child(*ind, ExpectedType::Specific(FastExprType::Int)),
                 ],
-                |mut typed, state: &mut TypeCheckState| {
+                move |mut typed, state: &mut TypeCheckState| {
                     assert!(typed.len() == 2);
                     let typed_ind: FastTypedExpr = typed.pop().unwrap();
                     let typed_arr = typed.pop().unwrap();
@@ -1142,7 +1123,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                         Box::new(typed_arr),
                         Box::new(typed_ind),
                     )
-                },
+                }.check_type(expected),
             )),
 
             FastExpr::ArrayUpdate(arr, ind, new_val) => {
@@ -1180,7 +1161,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                             Box::new(typed_ind),
                             Box::new(typed_new_val),
                         )
-                    },
+                    }.check_type(expected),
                     move |typed: &FastTypedExpr<'a>, state: &mut TypeCheckState| {
                         if parsed_ptr {
                             return None;
@@ -1212,7 +1193,7 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
 
             FastExpr::ArrayAlloc(elem_t, len) => {
                 let arr_t = ExprType::Array(Box::new(elem_t.clone()));
-                let arr_t = state.ingest(arr_t);
+                let arr_t = state.ingest(arr_t).0;
 
                 let elem_t = state.ingest(elem_t).0;
                 validate_type_fast(&elem_t, self.struct_hm, state).unwrap();
@@ -1230,18 +1211,18 @@ impl<'a, 'b> OneStep<'b, FastTypedExpr<'a>, TypeCheckState> for WrappedFastExpr<
                     move |mut typed, _state| {
                         assert!(typed.len() == 1);
                         let typed = typed.pop().unwrap();
-                        FastTypedExpr::ArrayAlloc(arr_t.0, Box::new(typed))
-                    },
+                        FastTypedExpr::ArrayAlloc(arr_t, Box::new(typed))
+                    }.check_type(expected),
                 ))
             }
 
             FastExpr::ArrayLen(arr) => StepResult::Nonterminal(StackState::new(
                 vec![self.split_child_inherit(*arr, ExpectedType::Any)],
-                |mut typed: Vec<FastTypedExpr>, _state| {
+                move |mut typed: Vec<FastTypedExpr>, _state| {
                     assert!(typed.len() == 1);
                     let typed_arr = typed.pop().unwrap();
                     FastTypedExpr::ArrayLen(FastExprType::Int, Box::new(typed_arr))
-                },
+                }.check_type(expected),
             )),
             FastExpr::__INTERNAL => unreachable!(),
         }
@@ -1291,7 +1272,7 @@ impl<'a> FastUserFunction<'a> {
         self,
         type_set: &mut TypeCheckState,
         struct_sigs: im::HashMap<&'a str, FastStructSignature<'a>>,
-        function_sigs: im::HashMap<&'a str, FastFunSignature<'a>>,
+        function_sigs: im::HashMap<&'a str, (FastFunSignature<'a>, ExprType)>,
         struct_hm: im::HashMap<&'a str, i32>,
     ) -> FastTypedFunction<'a> {
         let FastUserFunction::UserFun(name, FastFunSignature::Sig(ret_type, param_types), body) =
@@ -1310,7 +1291,7 @@ impl<'a> FastUserFunction<'a> {
         let wrapped_body = WrappedFastExpr {
             fast_expr: body,
             expected_type: ExpectedType::Specific(type_set.ingest_clone(&ret_type)),
-            type_bindings: type_bindings,
+            type_bindings,
             struct_hm: &struct_hm,
             function_sigs: &function_sigs,
             struct_sigs: &struct_sigs,
@@ -1391,18 +1372,20 @@ impl<'a> FastProg<'a> {
         /* --- Typecheck Functions --- */
 
         // read all functions into map of function name to type, checking for dupes and illegal names
-        let mut function_sigs: im::HashMap<&'a str, FastFunSignature> = im::HashMap::new();
+        let mut function_sigs: im::HashMap<&'a str, (FastFunSignature, ExprType)> =
+            im::HashMap::new();
         for FastUserFunction::UserFun(name, function_sig, _) in functions.iter() {
             match function_sigs.get(name) {
                 Some(_) => panic!("Duplicate Function Definition"),
                 None => {
-                    function_sigs.insert(name, function_sig.to_owned()); // TODO CLONE
-
                     let FastFunSignature::Sig(expr_type, vec) = &function_sig;
                     validate_type(expr_type, &struct_enum_map).unwrap();
                     for (v, _) in vec {
                         validate_type(v, &struct_enum_map).unwrap();
                     }
+
+                    let ptr_type = function_sig.get_ptr_type();
+                    function_sigs.insert(name, (function_sig.clone(), ptr_type));
                 }
             };
         }

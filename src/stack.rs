@@ -71,7 +71,7 @@ impl<'a, From, To: 'a, State: 'a> StackState<'a, From, To, State> {
                 self.unparsed.push(append_to_unparsed);
             }
         }
-    
+
         self.parsed.push(expr);
 
         match self.unparsed.pop() {
