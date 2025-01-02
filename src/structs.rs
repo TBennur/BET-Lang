@@ -1,7 +1,7 @@
 use im::HashMap;
 use std::fmt;
 
-use crate::{semantics::struct_type_enum_to_name, typecheck_fast::TypeCheckState};
+use crate::{semantics::struct_type_enum_to_name, typecheck_fast_shared::TypeCheckState};
 
 /* --- Types --- */
 
@@ -42,6 +42,12 @@ impl fmt::Debug for ExprType {
     }
 }
 
+impl<'a> Default for FastTypedExpr<'a> {
+    fn default() -> Self {
+        FastTypedExpr::__INTERNAL
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum FunSignature {
     // to insert into function signature hashmap, for type_check_expr
@@ -52,35 +58,6 @@ pub enum FunSignature {
 pub enum StructSignature {
     Sig(Vec<(ExprType, String)>),
 }
-
-// pub fn fast_extract_type(t: &FastTypedExpr) -> ExprType {
-//     match t {
-//         FastTypedExpr::Number(_) => ExprType::Int,
-//         FastTypedExpr::RDInput => ExprType::Int,
-//         FastTypedExpr::Boolean(_) => ExprType::Bool,
-//         FastTypedExpr::Input => ExprType::Int,
-//         FastTypedExpr::Id(expr_type, _) => expr_type.clone(),
-//         FastTypedExpr::Let(expr_type, _, _) => expr_type.clone(),
-//         FastTypedExpr::UnOp(expr_type, _, _) => expr_type.clone(),
-//         FastTypedExpr::BinOp(expr_type, _, _, _) => expr_type.clone(),
-//         FastTypedExpr::If(expr_type, _, _, _) => expr_type.clone(),
-//         FastTypedExpr::RepeatUntil(expr_type, _, _) => expr_type.clone(),
-//         FastTypedExpr::Set(expr_type, _, _) => expr_type.clone(),
-//         FastTypedExpr::Block(expr_type, _) => expr_type.clone(),
-//         FastTypedExpr::Call(expr_type, _, _) => expr_type.clone(),
-//         FastTypedExpr::Null(expr_type) => expr_type.clone(),
-//         FastTypedExpr::Alloc(expr_type) => expr_type.clone(),
-//         FastTypedExpr::Update(expr_type, _, _, _) => expr_type.clone(),
-//         FastTypedExpr::Lookup(expr_type, _, _) => expr_type.clone(),
-//         // new to bet
-//         FastTypedExpr::Unit => ExprType::Unit,
-//         FastTypedExpr::FunName(expr_type, _) => expr_type.clone(),
-//         FastTypedExpr::ArrayAlloc(expr_type, _) => expr_type.clone(),
-//         FastTypedExpr::ArrayLookup(expr_type, _, _) => expr_type.clone(),
-//         FastTypedExpr::ArrayUpdate(expr_type, _, _, _) => expr_type.clone(),
-//         FastTypedExpr::ArrayLen(expr_type, _) => expr_type.clone(),
-//     }
-// }
 
 pub fn extract_type(t: &TypedExpr) -> ExprType {
     // TODO CLONE
@@ -142,6 +119,7 @@ impl<'a> FastTypedExpr<'a> {
             FastTypedExpr::ArrayUpdate(expr_type, _, _, _) => expr_type.clone(),
             FastTypedExpr::ArrayLen(expr_type, _) => expr_type.clone(),
             FastTypedExpr::ArrayAlloc(expr_type, _) => expr_type.clone(),
+            FastTypedExpr::__INTERNAL => unreachable!(),
         }
     }
 }
@@ -318,7 +296,7 @@ pub enum TypedProg {
 
 /* --- For Compiling --- */
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum FunctionLabel {
     Pointer(Reg),
     Custom(String),
@@ -326,7 +304,7 @@ pub enum FunctionLabel {
     SnekError,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Val {
     Reg(Reg),
     Imm(i32),
@@ -334,7 +312,7 @@ pub enum Val {
     Global(String), // the name of a global, register containing offset
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Reg {
     RAX,
     RBX,
@@ -344,7 +322,7 @@ pub enum Reg {
     RDI,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Instr {
     Align(i32),
     IMov(Val, Val), // mov dest, source
@@ -366,6 +344,7 @@ pub enum Instr {
     JumpOverflow(String),
     Ret,
     Lea(Val, Val), // loads the efective address of the second val into the first
+    NoOp(String)
 }
 
 /* More memory efficient Expressions */
@@ -447,11 +426,12 @@ pub enum FastExprType {
     Int,
     Unit,
     Bool,
-    Other(usize),
+    Other(u32),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum FastTypedExpr<'a> {
+    __INTERNAL,
     Number(i32),
     Boolean(bool),
     Id(FastExprType, &'a str),

@@ -105,6 +105,7 @@ fn bad<T, T2>(_exprs: Vec<T>, _state: &mut T2) -> T {
 }
 
 impl<'a, From, To: 'a, State: 'a> StackState<'a, From, To, State> {
+    #[allow(dead_code)]
     pub fn new_plus(
         mut unparsed: Vec<From>, // `From` to parse, starting with the 0th element
         constructor: impl FnOnce(Vec<To>, &mut State) -> To + 'a,
@@ -124,6 +125,7 @@ impl<'a, From, To: 'a, State: 'a> StackState<'a, From, To, State> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new(
         mut unparsed: Vec<From>, // `From` to parse, starting with the 0th element
         constructor: impl FnOnce(Vec<To>, &mut State) -> To + 'a,

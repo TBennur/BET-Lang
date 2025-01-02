@@ -9,7 +9,7 @@ struct GrowSlice {
 }
 
 impl GrowSlice {
-    fn to_slice<'a, T>(&self, arr: &'a[T]) -> &'a [T] {
+    fn to_slice<'a, T>(&self, arr: &'a [T]) -> &'a [T] {
         let start = self.start_ind;
         let end = self.start_ind + self.len;
         &arr[start..end]
@@ -119,7 +119,6 @@ mod lex_config {
             }
         }
     }
-
 
     #[derive(Debug)]
     pub struct FastConfig {
@@ -278,6 +277,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    #[allow(dead_code)]
     pub fn new(conf: LexerConfig) -> Self {
         Lexer {
             conf: FastConfig::new(conf),
@@ -427,6 +427,7 @@ pub struct AsciiMap<T> {
     vals: [Option<T>; 256],
 }
 
+#[allow(dead_code)]
 impl<T: std::marker::Copy> AsciiMap<T> {
     fn get(&self, ch: u8) -> Option<&T> {
         self.vals[ch as usize].as_ref()
@@ -462,7 +463,7 @@ fn atom_from(s: &str) -> Atom {
 #[derive(Debug)]
 struct LexState<'a> {
     active_unary_ops: Option<Vec<&'a u8>>, // NONE or the unary op we have
-    opening_ind: Option<usize>,        // NONE or index
+    opening_ind: Option<usize>,            // NONE or index
     context: Vec<Lexpr<'a>>, // a context, of a type corresponding to curr_opening_ind, such as an entire {}
     partial_list: Vec<Lexpr<'a>>, // the list which composes the current list, such as
     partial_str: GrowSlice,
@@ -494,8 +495,7 @@ impl<'a> LexState<'a> {
         self.partial_str = GrowSlice::new_empty(next_ind);
 
         if partial_str.len() > 0 {
-            let mut to_push =
-                Lexpr::Atom(atom_from(std::str::from_utf8(partial_str).unwrap()));
+            let mut to_push = Lexpr::Atom(atom_from(std::str::from_utf8(partial_str).unwrap()));
 
             if let Some(ref mut uops) = self.active_unary_ops {
                 while uops.len() > 0 {

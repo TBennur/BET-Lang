@@ -1,4 +1,4 @@
-use crate::alt_stack::*;
+use crate::alt_stack::StepResult;
 use crate::alt_stack_variants::{Constructor, SimpleStackState};
 use crate::lex::{
     Atom::{F, I, S},
