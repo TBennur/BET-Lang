@@ -1,2 +1,8 @@
 /target
 output.txt
+conway.gif
+flamegraph.svg
+output.txt
+tests/final/conways.bet
+gen_container_test
+tests/final/chained_assignment.bet

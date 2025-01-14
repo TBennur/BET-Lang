@@ -2,101 +2,13 @@ use std::vec;
 
 use im::HashMap;
 
+use crate::compile_shared::{
+    compute_aligned_rsp_offset, emit_program, generate_label, increment_counter, instr_to_string,
+    type_to_flag,
+};
 use crate::consts::*;
 use crate::semantics::{struct_name_to_type_enum, struct_type_enum_to_name, STRUCT_NUM_TO_NAME};
 use crate::structs::*;
-
-/**
- * Helper Function
- */
-
-pub fn type_to_flag(t: ExprType) -> i32 {
-    match t {
-        ExprType::Int => INT_TYPE_FLAG,
-        ExprType::Bool => BOOL_TYPE_FLAG,
-        ExprType::Unit => UNIT_TYPE_FLAG,
-        ExprType::StructPointer(i) => i,
-        ExprType::FunctionPointer(_arg_types, _ret_type) => todo!(),
-        ExprType::Array(expr_type) =>{
-            match *expr_type {
-                ExprType::Int => 10_000_000,
-                _ => todo!()
-            }
-
-        },
-    }
-}
-
-fn increment_counter(counter: &mut i64) -> i64 {
-    *counter += 1;
-    *counter
-}
-
-fn generate_label(label_name: &String, label_counter: i64) -> String {
-    return format!("{}_label_{}", label_name, label_counter);
-}
-
-fn compute_aligned_rsp_offset(rsp_offset: i32) -> i32 {
-    return (rsp_offset / 16) * 16 - 8;
-}
-
-/**
- * To String Functions
- */
-
-fn instr_to_str(i: &Instr) -> String {
-    match i {
-        Instr::IMov(dst, src) => format!("\tmov {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::IAdd(dst, src) => format!("\tadd {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::ISub(dst, src) => format!("\tsub {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::IMul(dst, src) => format!("\timul {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::LXOR(dst, src) => format!("\txor {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::LOR(dst, src) => format!("\tor {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::LAND(dst, src) => format!("\tand {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::Compare(dst, src) => format!("\tcmp {}, {}", val_to_str(dst), val_to_str(src)),
-        Instr::Call(function) => format!("\tcall {}", fn_to_str(function)),
-        Instr::AddLabel(label) => format!("{}:", label.to_string()),
-        Instr::Jump(label) => format!("\tjmp {}", label.to_string()),
-        Instr::JumpGreater(label) => format!("\tjg {}", label.to_string()),
-        Instr::JumpGreaterEqual(label) => format!("\tjge {}", label.to_string()),
-        Instr::JumpEqual(label) => format!("\tje {}", label.to_string()),
-        Instr::JumpLessEqual(label) => format!("\tjle {}", label.to_string()),
-        Instr::JumpLess(label) => format!("\tjl {}", label.to_string()),
-        Instr::JumpOverflow(label) => format!("\tjo {}", label.to_string()),
-        Instr::Ret => "\tret".to_string(),
-        Instr::Lea(dst, src) => format!("\tlea {}, [rel {}]", val_to_str(dst), val_to_str(src)),
-        Instr::Align(alignment) => format!("align {}", alignment),
-    }
-}
-
-fn fn_to_str(f: &FunctionLabel) -> String {
-    match f {
-        FunctionLabel::SnekPrint => "snek_print".to_string(),
-        FunctionLabel::SnekError => "snek_error".to_string(),
-        FunctionLabel::Custom(name) => name.to_string(),
-        FunctionLabel::Pointer(reg) => reg_to_str(reg),
-    }
-}
-
-fn reg_to_str(r: &Reg) -> String {
-    match r {
-        Reg::RAX => "rax".to_string(),
-        Reg::RBX => "rbx".to_string(),
-        Reg::RDX => "rdx".to_string(),
-        Reg::RSP => "rsp".to_string(),
-        Reg::RSI => "rsi".to_string(),
-        Reg::RDI => "rdi".to_string(),
-    }
-}
-
-fn val_to_str(v: &Val) -> String {
-    match v {
-        Val::Reg(r) => reg_to_str(r),
-        Val::RegOffset(r, off) => format!("[{} + {}]", reg_to_str(r), off),
-        Val::Imm(x) => format!("{}", x),
-        Val::Global(global_name) => format!("{}", global_name),
-    }
-}
 
 /**
  * Compilation Functions
@@ -112,6 +24,16 @@ fn compile_bin_op_to_instrs(
     label_counter: &mut i64,
     label_name: &String,
 ) -> Vec<Instr> {
+    let (label_true, label_finish) = match op {
+        Op2::Greater | Op2::GreaterEqual | Op2::Equal | Op2::LessEqual | Op2::Less => {
+            let label_true = generate_label(label_name, increment_counter(label_counter));
+            let label_finish = generate_label(label_name, increment_counter(label_counter));
+            (Some(label_true), Some(label_finish))
+        }
+
+        _ => (None, None),
+    };
+
     let mut instr_to_compute_res: Vec<Instr> = vec![];
 
     // compute the value of a into RAX
@@ -177,8 +99,8 @@ fn compile_bin_op_to_instrs(
                 Val::RegOffset(Reg::RSP, a_rsp_offset),
             ));
 
-            let label_true = generate_label(label_name, increment_counter(label_counter));
-            let label_finish = generate_label(label_name, increment_counter(label_counter));
+            let label_true = label_true.unwrap();
+            let label_finish = label_finish.unwrap();
 
             instr_to_compute_res.push(match op {
                 Op2::Greater => Instr::JumpGreater,
@@ -215,7 +137,7 @@ fn compile_expr_to_instrs(
 ) -> Vec<Instr> {
     // binding maps a identifier to a location in memory-- specifcally, an
     // offset from rsp, in bytes
-    match e {
+    let mut intrs = match e {
         TypedExpr::RDInput => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))],
 
         // immediate values
@@ -270,7 +192,7 @@ fn compile_expr_to_instrs(
                 }
                 Op1::Not => instructions.push(Instr::LXOR(Val::Reg(Reg::RAX), Val::Imm(1))),
                 Op1::Print => {
-                    let flag = type_to_flag(t.clone());
+                    let flag = type_to_flag(t);
 
                     instructions.push(Instr::IMov(Val::Reg(Reg::RSI), Val::Imm(flag)));
                     instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // load val into rdi
@@ -357,54 +279,54 @@ fn compile_expr_to_instrs(
             instructions_to_compile_let
         }
 
-        TypedExpr::If(_, expr, expr1, expr2) => {
-            let mut instructions_to_compile_if: Vec<Instr> = vec![];
+        TypedExpr::If(_, cond, if_true, if_false) => {
+            let mut instr_to_compile_if: Vec<Instr> = vec![];
+            let left_label = generate_label(label_name, increment_counter(label_counter));
+            let if_finish_label = generate_label(label_name, increment_counter(label_counter));
 
             // Conditional Expression
             let code_to_eval_expr = compile_expr_to_instrs(
-                expr,
+                cond,
                 scope_bindings.clone(),
                 &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
             );
-            instructions_to_compile_if.extend(code_to_eval_expr);
-            instructions_to_compile_if.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1)));
-            let left_label = generate_label(label_name, increment_counter(label_counter));
+            instr_to_compile_if.extend(code_to_eval_expr);
+            instr_to_compile_if.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1)));
 
-            instructions_to_compile_if.push(Instr::JumpEqual(left_label.clone()));
+            instr_to_compile_if.push(Instr::JumpEqual(left_label.clone()));
 
             // Right Branch
             let code_to_eval_expr2 = compile_expr_to_instrs(
-                expr2,
+                if_false,
                 scope_bindings.clone(),
                 &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
             );
-            instructions_to_compile_if.extend(code_to_eval_expr2);
+            instr_to_compile_if.extend(code_to_eval_expr2);
 
-            let if_finish_label = generate_label(label_name, increment_counter(label_counter));
-            instructions_to_compile_if.push(Instr::Jump(if_finish_label.clone()));
+            instr_to_compile_if.push(Instr::Jump(if_finish_label.clone()));
 
             // Left Branch
-            instructions_to_compile_if.push(Instr::AddLabel(left_label.clone()));
+            instr_to_compile_if.push(Instr::AddLabel(left_label.clone()));
             let code_to_eval_expr1 = compile_expr_to_instrs(
-                expr1,
+                if_true,
                 scope_bindings.clone(),
                 &struct_layouts,
                 rsp_offset,
                 label_counter,
                 label_name,
             );
-            instructions_to_compile_if.extend(code_to_eval_expr1);
+            instr_to_compile_if.extend(code_to_eval_expr1);
 
             // Finish
-            instructions_to_compile_if.push(Instr::AddLabel(if_finish_label.clone()));
+            instr_to_compile_if.push(Instr::AddLabel(if_finish_label.clone()));
 
-            instructions_to_compile_if
+            instr_to_compile_if
         }
 
         TypedExpr::Set(_, identifier, expr) => {
@@ -435,6 +357,7 @@ fn compile_expr_to_instrs(
 
             instructions_to_compile_set
         }
+
         TypedExpr::Block(_, block) => {
             if block.len() == 0 {
                 panic!("Invalid: Empty Block");
@@ -532,12 +455,12 @@ fn compile_expr_to_instrs(
                 }
             };
 
-            let mut instructions = Vec::new();
+            let mut inst_to_call = Vec::new();
             let mut curr_rsp_offset = rsp_offset;
 
             let ptr_rsp_offset = if is_in_rax {
                 // compile function pointer
-                instructions.extend(compile_expr_to_instrs(
+                inst_to_call.extend(compile_expr_to_instrs(
                     &fun_name_or_ptr,
                     scope_bindings.clone(),
                     struct_layouts,
@@ -548,7 +471,7 @@ fn compile_expr_to_instrs(
 
                 // push pointer onto stack
                 curr_rsp_offset -= SIZEOF_I_64;
-                instructions.push(Instr::IMov(
+                inst_to_call.push(Instr::IMov(
                     Val::RegOffset(Reg::RSP, curr_rsp_offset),
                     Val::Reg(Reg::RAX),
                 ));
@@ -575,11 +498,11 @@ fn compile_expr_to_instrs(
                     label_counter,
                     label_name,
                 );
-                instructions.extend(instr_to_eval_arg);
+                inst_to_call.extend(instr_to_eval_arg);
 
                 // store this argument on the stack
                 curr_rsp_offset -= SIZEOF_I_64;
-                instructions.push(Instr::IMov(
+                inst_to_call.push(Instr::IMov(
                     Val::RegOffset(Reg::RSP, curr_rsp_offset),
                     Val::Reg(Reg::RAX),
                 ));
@@ -587,42 +510,52 @@ fn compile_expr_to_instrs(
 
             if is_in_rax {
                 // move function pointer address, stored on the stack, into RAX
-                instructions.push(Instr::IMov(
+                inst_to_call.push(Instr::IMov(
                     Val::Reg(Reg::RAX),
                     Val::RegOffset(Reg::RSP, ptr_rsp_offset),
                 ));
 
-                instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
-                instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
-                instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
+                inst_to_call.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
+                inst_to_call.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
+                inst_to_call.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
             }
 
             // update RSP for the function call
-            instructions.push(Instr::IAdd(
+            inst_to_call.push(Instr::IAdd(
                 Val::Reg(Reg::RSP),
                 Val::Imm(compute_aligned_rsp_offset(curr_rsp_offset)),
             )); // Reset Alignment
 
             // call the function
-            instructions.push(Instr::Call(fun_label));
+            inst_to_call.push(Instr::Call(fun_label));
 
-            instructions.push(Instr::ISub(
+            inst_to_call.push(Instr::ISub(
                 Val::Reg(Reg::RSP),
                 Val::Imm(compute_aligned_rsp_offset(curr_rsp_offset)),
             )); // Reset Alignment
 
-            instructions
+            inst_to_call
         }
+
         TypedExpr::Null(_) => vec![Instr::IMov(Val::Reg(Reg::RAX), Val::Imm(0))],
+
         TypedExpr::Alloc(expr_type) => {
             let mut instructions = Vec::new();
+            let debug: &'static str = "create";
             let type_string = match expr_type {
                 ExprType::Bool => {
-                    panic!("Unexpected: Attempted to create a Bool pointer. This should not happen")
+                    panic!(
+                        "Unexpected: Attempted to {debug} a Bool pointer. This should not happen"
+                    )
                 }
                 ExprType::Int => {
-                    panic!("Unexpected: Attempted to create an Int pointer. This should not happen")
+                    panic!(
+                        "Unexpected: Attempted to {debug} an Int pointer. This should not happen"
+                    )
                 }
+                ExprType::Unit => panic!(
+                    "Unexpected: Attempted to {debug} an Unit pointer. This should not happen"
+                ),
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
                     let res = num_to_name_map.get(&n);
@@ -633,11 +566,8 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
-                ExprType::Unit => panic!(
-                    "Unexpected: Attempted to create an Unit pointer. This should not happen"
-                ),
                 ExprType::FunctionPointer(_arg_types, _ret_type) => {
-                    panic!("Unexpected: Attempted to create an Function pointer pointer. This should not happen")
+                    panic!("Unexpected: Attempted to {debug} an Function pointer pointer. This should not happen")
                 }
                 ExprType::Array(_expr_type) => todo!(),
             };
@@ -668,18 +598,20 @@ fn compile_expr_to_instrs(
             instructions.push(Instr::IAdd(Val::Reg(Reg::RBX), Val::Imm(alloc_size))); // rbx := num bytes allocated + num bytes needed
             instructions
         }
-        TypedExpr::Update(_, typed_expr, field_name, typed_expr_val) => {
+
+        TypedExpr::Update(_, ptr, field_name, new_val) => {
             let mut instructions = Vec::new();
-            let expr_type = extract_type(typed_expr);
+            let debug: &'static str = "access";
+            let expr_type = extract_type(ptr);
             let type_string = match expr_type {
                 ExprType::Bool => {
-                    panic!("Unexpected: Attempted to access a Bool pointer. This should not happen")
+                    panic!("Unexpected: Attempted to {debug} a Bool pointer. This should not happen")
                 }
                 ExprType::Int => {
-                    panic!("Unexpected: Attempted to access an Int pointer. This should not happen")
+                    panic!("Unexpected: Attempted to {debug} an Int pointer. This should not happen")
                 }
                 ExprType::Unit => panic!(
-                    "Unexpected: Attempted to access an Unit pointer. This should not happen"
+                    "Unexpected: Attempted to {debug} an Unit pointer. This should not happen"
                 ),
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
@@ -691,8 +623,8 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
-                ExprType::FunctionPointer(_arg_type, _ret_type) => 
-                    panic!("Unexpected: Attempted to access a Function pointer pointer. This should not happen"),
+                ExprType::FunctionPointer(_arg_types, _ret_type) =>
+                    panic!("Unexpected: Attempted to {debug} a Function pointer pointer. This should not happen"),
                 ExprType::Array(_expr_type) => todo!(),
             };
             let offset = match struct_layouts.get(&type_string) {
@@ -704,7 +636,7 @@ fn compile_expr_to_instrs(
             };
 
             let instr_to_get_val = compile_expr_to_instrs(
-                typed_expr_val,
+                new_val,
                 scope_bindings.clone(),
                 &struct_layouts,
                 rsp_offset,
@@ -719,7 +651,7 @@ fn compile_expr_to_instrs(
             ));
 
             let instr_to_get_struct = compile_expr_to_instrs(
-                typed_expr,
+                ptr,
                 scope_bindings.clone(),
                 &struct_layouts,
                 cur_rsp_offset,
@@ -746,18 +678,20 @@ fn compile_expr_to_instrs(
 
             instructions
         }
+
         TypedExpr::Lookup(_, typed_expr, field_name) => {
             let mut instructions = Vec::new();
+            let debug: &'static str = "access";
             let expr_type = extract_type(typed_expr);
             let type_string = match expr_type {
                 ExprType::Bool => {
-                    panic!("Unexpected: Attempted to access a Bool pointer. This should not happen")
+                    panic!("Unexpected: Attempted to {debug} a Bool pointer. This should not happen")
                 }
                 ExprType::Int => {
-                    panic!("Unexpected: Attempted to access an Int pointer. This should not happen")
+                    panic!("Unexpected: Attempted to {debug} an Int pointer. This should not happen")
                 }
                 ExprType::Unit => panic!(
-                    "Unexpected: Attempted to access an Unit pointer. This should not happen"
+                    "Unexpected: Attempted to {debug} an Unit pointer. This should not happen"
                 ),
                 ExprType::StructPointer(n) => {
                     let num_to_name_map = STRUCT_NUM_TO_NAME.lock().unwrap();
@@ -769,9 +703,8 @@ fn compile_expr_to_instrs(
                         ),
                     }
                 }
-                ExprType::FunctionPointer(_arg_types, _ret_type) => panic!(
-                    "Unexpected: Attempted to access an Function pointer pointer. This should not happen"
-                ),
+                ExprType::FunctionPointer(_arg_types, _ret_type) =>
+                    panic!("Unexpected: Attempted to {debug} a Function pointer pointer. This should not happen"),
                 ExprType::Array(_expr_type) => todo!(),
             };
             let offset = match struct_layouts.get(&type_string) {
@@ -806,15 +739,11 @@ fn compile_expr_to_instrs(
 
             instructions
         }
-
         TypedExpr::Unit => vec![],
-
         TypedExpr::FunName(_expr_type, name) => {
             vec![Instr::Lea(Val::Reg(Reg::RAX), Val::Global(name.to_owned()))]
         }
-        
         TypedExpr::ArrayAlloc(_elem_t, len) => {
-            
             let mut instructions = compile_expr_to_instrs(
                 len,
                 scope_bindings.clone(),
@@ -823,13 +752,13 @@ fn compile_expr_to_instrs(
                 label_counter,
                 label_name,
             ); // requested num elems is in RAX
-            
+
             // Throw runtime if num of elements is <= 0
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(1))); // num_elem ? 1
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(4))); // num_elem < 1 : error
             instructions.push(Instr::JumpLess(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
-            // Put num elements on top of stack 
+            // Put num elements on top of stack
             let mut curr_rsp_offset = rsp_offset;
             curr_rsp_offset -= SIZEOF_I_64; // get 8 bytes of space on the stack
             let a_rsp_offset = curr_rsp_offset;
@@ -839,16 +768,16 @@ fn compile_expr_to_instrs(
             ));
 
             // Convert from number of elements to size, alloc size should be in RAX
-            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1))); 
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Imm(1)));
             instructions.push(Instr::IMul(Val::Reg(Reg::RAX), Val::Imm(SIZEOF_I_64)));
-            // size (byte) is in RAX 
+            // size (byte) is in RAX
 
             // logic: if (RBX + alloc_size) > BUFFER_SIZE, go to ERROR_LABEL
             instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := (num bytes allocated + num bytes needed)
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(BUFFER_SIZE))); // if (num bytes allocated + num bytes needed) > BUFFER_SIZE:
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(2)));
             instructions.push(Instr::JumpGreater(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
-            
+
             // Put unaltered size-- number of elements-- in RDI (will write to 0th elem of backing array)
             instructions.push(Instr::IMov(
                 Val::Reg(Reg::RDI),
@@ -861,28 +790,25 @@ fn compile_expr_to_instrs(
                 Val::Global(BUFFER_NAME.to_string()),
             )); // rax := &array
             instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RBX))); // rax := &array + rbx
-            
-            instructions.push(Instr::IMov(
-                Val::RegOffset(Reg::RAX, 0),
-                Val::Reg(Reg::RDI),
-            )); // mov (rax), RDI
-        
-            
-            instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1))); 
+
+            instructions.push(Instr::IMov(Val::RegOffset(Reg::RAX, 0), Val::Reg(Reg::RDI))); // mov (rax), RDI
+
+            instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1)));
             instructions.push(Instr::IMul(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64)));
 
             // update the total bytes allocated, so that the next alloc points to next free addrr
             instructions.push(Instr::IAdd(Val::Reg(Reg::RBX), Val::Reg(Reg::RDI))); // rbx := num bytes allocated + num bytes needed
             instructions
+        }
 
-        },
         TypedExpr::ArrayLen(_elem_t, arr_addr) => {
-            let mut instructions = compile_expr_to_instrs(arr_addr, 
-                scope_bindings, 
-                struct_layouts, 
-                rsp_offset, 
+            let mut instructions = compile_expr_to_instrs(
+                arr_addr,
+                scope_bindings,
+                struct_layouts,
+                rsp_offset,
                 label_counter,
-                label_name
+                label_name,
             );
 
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if arr is null
@@ -896,12 +822,11 @@ fn compile_expr_to_instrs(
             ));
 
             instructions
-        },
+        }
         TypedExpr::ArrayLookup(_elem_t, arr, ind_expr) => {
-
             let mut curr_rsp_offset = rsp_offset;
             let mut instructions = Vec::new();
-            
+
             instructions.extend(compile_expr_to_instrs(
                 arr,
                 scope_bindings.clone(),
@@ -910,13 +835,13 @@ fn compile_expr_to_instrs(
                 label_counter,
                 label_name,
             )); // requested arr is in RAX
-            
+
             // if arr ptr is null, die
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
             instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
-            // If not null, put arr on top of stack 
+            // If not null, put arr on top of stack
             curr_rsp_offset -= SIZEOF_I_64; // get 8 bytes of space on the stack
             let a_rsp_offset = curr_rsp_offset;
             instructions.push(Instr::IMov(
@@ -932,26 +857,40 @@ fn compile_expr_to_instrs(
                 label_counter,
                 label_name,
             )); // index now in rax
-            
+
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // RDI := index
-            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset))); // RAX := address of array
-            instructions.push(Instr::IMov(Val::RegOffset(Reg::RSP, a_rsp_offset), Val::Reg(Reg::RDI))); // index on stack
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // RAX := address of array
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+                Val::Reg(Reg::RDI),
+            )); // index on stack
 
             // didn't die, so arr ptr isn't null, so test bounds
             instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::Imm(0))); // if indice is negative fail
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
             instructions.push(Instr::JumpLess(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested index
-            instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RAX, 0))); // if indice is greater or equal to len fail
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // rdi now contains requested index
+            instructions.push(Instr::Compare(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RAX, 0),
+            )); // if indice is greater or equal to len fail
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
             instructions.push(Instr::JumpGreaterEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
             // null & bounds check cleared; update element
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested elem index
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // rdi now contains requested elem index
             instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1)));
             instructions.push(Instr::IMul(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64))); // rdi now contains index in bytes
-            
 
             instructions.push(Instr::IAdd(Val::Reg(Reg::RAX), Val::Reg(Reg::RDI))); // rax now contains address of array index to write to
             instructions.push(Instr::IMov(
@@ -960,11 +899,11 @@ fn compile_expr_to_instrs(
             )); // rax now contains element
 
             instructions
-        },
+        }
         TypedExpr::ArrayUpdate(_elem_t, arr, ind_expr, new_val) => {
             let mut curr_rsp_offset = rsp_offset;
             let mut instructions = Vec::new();
-            
+
             instructions.extend(compile_expr_to_instrs(
                 arr,
                 scope_bindings.clone(),
@@ -973,13 +912,13 @@ fn compile_expr_to_instrs(
                 label_counter,
                 label_name,
             )); // requested arr is in RAX
-            
+
             // if arr ptr is null, die
             instructions.push(Instr::Compare(Val::Reg(Reg::RAX), Val::Imm(0))); // if val is null
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(3)));
             instructions.push(Instr::JumpEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
-            // If not null, put arr on top of stack 
+            // If not null, put arr on top of stack
             curr_rsp_offset -= SIZEOF_I_64; // get 8 bytes of space on the stack
             let a_rsp_offset = curr_rsp_offset;
             instructions.push(Instr::IMov(
@@ -995,23 +934,38 @@ fn compile_expr_to_instrs(
                 label_counter,
                 label_name,
             )); // index now in rax
-            
+
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // RDI := index
-            instructions.push(Instr::IMov(Val::Reg(Reg::RAX), Val::RegOffset(Reg::RSP, a_rsp_offset))); // RAX := address of array
-            instructions.push(Instr::IMov(Val::RegOffset(Reg::RSP, a_rsp_offset), Val::Reg(Reg::RDI))); // index on stack
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RAX),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // RAX := address of array
+            instructions.push(Instr::IMov(
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+                Val::Reg(Reg::RDI),
+            )); // index on stack
 
             // didn't die, so arr ptr isn't null, so test bounds
             instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::Imm(0))); // if indice is negative fail
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
             instructions.push(Instr::JumpLess(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested index
-            instructions.push(Instr::Compare(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RAX, 0))); // if indice is greater or equal to len fail
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // rdi now contains requested index
+            instructions.push(Instr::Compare(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RAX, 0),
+            )); // if indice is greater or equal to len fail
             instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::Imm(5)));
             instructions.push(Instr::JumpGreaterEqual(ERROR_LABEL.to_string())); // jump to ERROR_LABEL
 
             // null & bounds check cleared; get address of element
-            instructions.push(Instr::IMov(Val::Reg(Reg::RDI), Val::RegOffset(Reg::RSP, a_rsp_offset))); // rdi now contains requested elem index
+            instructions.push(Instr::IMov(
+                Val::Reg(Reg::RDI),
+                Val::RegOffset(Reg::RSP, a_rsp_offset),
+            )); // rdi now contains requested elem index
             instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Imm(1)));
             instructions.push(Instr::IMul(Val::Reg(Reg::RDI), Val::Imm(SIZEOF_I_64))); // rdi now contains index in bytes
             instructions.push(Instr::IAdd(Val::Reg(Reg::RDI), Val::Reg(Reg::RAX))); // rdi now contains address of array index to write to
@@ -1020,31 +974,56 @@ fn compile_expr_to_instrs(
                 Val::RegOffset(Reg::RSP, a_rsp_offset),
                 Val::Reg(Reg::RDI),
             ));
-            
+
             instructions.extend(compile_expr_to_instrs(
-                    new_val, 
-                    scope_bindings, 
-                    struct_layouts, 
-                    curr_rsp_offset, 
-                    label_counter, 
-                    label_name
-                )
-            ); // RAX now contains new value
+                new_val,
+                scope_bindings,
+                struct_layouts,
+                curr_rsp_offset,
+                label_counter,
+                label_name,
+            )); // RAX now contains new value
 
             instructions.push(Instr::IMov(
                 Val::Reg(Reg::RDI),
                 Val::RegOffset(Reg::RSP, a_rsp_offset),
-            )); // rdi now contains address of array index to 
+            )); // rdi now contains address of array index to
 
-            instructions.push(Instr::IMov(
-                Val::RegOffset(Reg::RDI, 0),
-                Val::Reg(Reg::RAX),
-            ));
+            instructions.push(Instr::IMov(Val::RegOffset(Reg::RDI, 0), Val::Reg(Reg::RAX)));
 
             instructions
-        
-        },
-    }
+        }
+    };
+
+    intrs.push(Instr::NoOp(
+        match e {
+            TypedExpr::Number(_) => "Number",
+            TypedExpr::Boolean(_) => "Boolean",
+            TypedExpr::Id(_, _) => "Id",
+            TypedExpr::Let(_, _, _) => "Let",
+            TypedExpr::UnOp(_, _, _) => "UnOp",
+            TypedExpr::BinOp(_, _, _, _) => "BinOp",
+            TypedExpr::If(_, _, _, _) => "If",
+            TypedExpr::RepeatUntil(_, _, _) => "RepeatUntil",
+            TypedExpr::Set(_, _, _) => "Set",
+            TypedExpr::Block(_, _) => "Block",
+            TypedExpr::FunName(_, _) => "FunName",
+            TypedExpr::Call(_, _, _) => "Call",
+            TypedExpr::Input => "Input",
+            TypedExpr::RDInput => "RDInput",
+            TypedExpr::Null(_) => "Null",
+            TypedExpr::Alloc(_) => "Alloc",
+            TypedExpr::Update(_, _, _, _) => "Update",
+            TypedExpr::Lookup(_, _, _) => "Lookup",
+            TypedExpr::Unit => "Unit",
+            TypedExpr::ArrayAlloc(_, _) => "ArrayAlloc",
+            TypedExpr::ArrayLookup(_, _, _) => "ArrayLookup",
+            TypedExpr::ArrayUpdate(_, _, _, _) => "ArrayUpdate",
+            TypedExpr::ArrayLen(_, _) => "ArrayLen",
+        }
+        .to_string(),
+    ));
+    intrs
 }
 
 fn compile_fn(f: &TypedFunction, struct_layouts: &HashMap<String, StructLayout>) -> Vec<Instr> {
@@ -1131,7 +1110,9 @@ fn serialize_struct_layouts(
                             None => unreachable!(),
                         }
                     }
-                    ExprType::FunctionPointer(_arg_type, _ret_type) => "todo!(function pointer)".to_string(),
+                    ExprType::FunctionPointer(_arg_type, _ret_type) => {
+                        "todo!(function pointer)".to_string()
+                    }
                     ExprType::Array(_expr_type) => "todo!(array)".to_string(),
                 },
                 None => unreachable!(),
@@ -1144,7 +1125,7 @@ fn serialize_struct_layouts(
     res_vec.join(",")
 }
 
-pub fn compile_prog(tp: &TypedProg) -> String {
+pub fn compile_prog(tp: &TypedProg) -> Vec<Instr> {
     let TypedProg::Program(body_type, struct_sigs, struct_layouts, typed_funs, typed_e) = tp;
 
     let mut all_instrs = Vec::new();
@@ -1190,33 +1171,21 @@ pub fn compile_prog(tp: &TypedProg) -> String {
     all_instrs.push(Instr::Call(FunctionLabel::SnekError));
     all_instrs.push(Instr::Ret);
 
-    let instrs_string = all_instrs
-        .into_iter()
-        .map(|instr| format!("  {}", instr_to_str(&instr)))
-        .collect::<Vec<String>>()
-        .join("\n");
+    all_instrs
+}
 
-    let serialized = serialize_struct_layouts(&struct_sigs, &struct_layouts);
+#[derive(PartialEq, Debug)]
+pub struct StructSerializer {
+    pub struct_sigs: HashMap<String, StructSignature>, // to know the types of fields
+    pub struct_layouts: HashMap<String, StructLayout>, // to know the offsets of fields
+}
 
-    let full_program = format!(
-        "
-section .data
-global structHashmap
-structHashmap db \"{serialized}\", 0
-
-section .bss
-global {BUFFER_NAME}
-{BUFFER_NAME}: resb {BUFFER_SIZE} ; reserve {BUFFER_SIZE} bytes for array
-
-section .text
-
-extern snek_print
-extern snek_error
-
-global our_code_starts_here
-{instrs_string}
-
-"
-    );
-    full_program
+impl std::fmt::Display for StructSerializer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            serialize_struct_layouts(&self.struct_sigs, &self.struct_layouts)
+        )
+    }
 }

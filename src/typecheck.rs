@@ -77,6 +77,8 @@ impl Expr {
         allow_input: bool,
     ) -> TypedExpr {
         let tchecked_exr = match self {
+            Expr::Unit => TypedExpr::Unit,
+
             Expr::Input => {
                 if !allow_input {
                     panic!("Invalid: Input is not an Int")
@@ -109,6 +111,56 @@ impl Expr {
             },
 
             Expr::Number(n) => TypedExpr::Number(n),
+
+            Expr::FunName(fun_name) => match function_sigs.get(&fun_name) {
+                // check global functions first
+                Some(FunSignature::Sig(return_type, param_types)) => {
+                    let param_types: Vec<ExprType> = param_types
+                        .into_iter()
+                        .map(|(param_type, _param_name)| param_type.to_owned()) // TODO CLONE
+                        .collect();
+
+                    TypedExpr::FunName(
+                        ExprType::FunctionPointer(param_types, Box::new(return_type.clone())),
+                        fun_name.to_string(),
+                    )
+                }
+
+                None => {
+                    // variables next
+                    match type_bindings.get(&fun_name) {
+                        Some(ExprType::FunctionPointer(arg_types, ret_type)) => TypedExpr::Id(
+                            ExprType::FunctionPointer(arg_types.to_owned(), ret_type.to_owned()),
+                            fun_name.to_string(),
+                        ),
+                        _ => panic!(
+                            "Invalid: Called function {:?}, which doesn't exist",
+                            fun_name
+                        ),
+                    }
+                }
+            },
+
+            Expr::Null(struct_name) => {
+                // check that struct type actually exists (and is well typed)
+                if !struct_sigs.contains_key(&struct_name) {
+                    panic!(
+                        "Invalid: null pointer to unknown struct type: {}",
+                        struct_name
+                    )
+                } // struct_name is valid
+                let struct_enum = struct_name_to_type_enum(&struct_name);
+                TypedExpr::Null(ExprType::StructPointer(struct_enum))
+            }
+
+            Expr::Alloc(struct_name) => {
+                // check that struct type actually exists (and is well typed)
+                if !struct_sigs.contains_key(&struct_name) {
+                    panic!("Invalid: alloc of unknown struct type: {}", struct_name)
+                } // struct_name is valid
+                let struct_enum = struct_name_to_type_enum(&struct_name);
+                TypedExpr::Alloc(ExprType::StructPointer(struct_enum))
+            }
 
             Expr::UnOp(op1, expr) => {
                 let expected_type = match op1 {
@@ -416,25 +468,6 @@ impl Expr {
                 TypedExpr::Call(*ret_type, Box::new(typed_name_or_ptr), typed_args)
             }
 
-            Expr::Null(struct_name) => {
-                // check that struct type actually exists (and is well typed)
-                if !struct_sigs.contains_key(&struct_name) {
-                    panic!(
-                        "Invalid: null pointer to unknown struct type: {}",
-                        struct_name
-                    )
-                } // struct_name is valid
-                let struct_enum = struct_name_to_type_enum(&struct_name);
-                TypedExpr::Null(ExprType::StructPointer(struct_enum))
-            }
-            Expr::Alloc(struct_name) => {
-                // check that struct type actually exists (and is well typed)
-                if !struct_sigs.contains_key(&struct_name) {
-                    panic!("Invalid: alloc of unknown struct type: {}", struct_name)
-                } // struct_name is valid
-                let struct_enum = struct_name_to_type_enum(&struct_name);
-                TypedExpr::Alloc(ExprType::StructPointer(struct_enum))
-            }
             Expr::Update(pointer, field_name, new_value) => {
                 // first expression must be a pointer type
                 let pointer_typed_expr = pointer.typecheck(
@@ -497,6 +530,7 @@ impl Expr {
                     Box::new(update_typed_expr),
                 )
             }
+            
             Expr::Lookup(pointer, field_name) => {
                 // first expression must be a pointer type
                 let pointer_typed_expr = pointer.typecheck(
@@ -539,35 +573,7 @@ impl Expr {
 
                 TypedExpr::Lookup(expected_type, Box::new(pointer_typed_expr), field_name)
             }
-            Expr::Unit => TypedExpr::Unit,
-            Expr::FunName(fun_name) => match function_sigs.get(&fun_name) {
-                // check global functions first
-                Some(FunSignature::Sig(return_type, param_types)) => {
-                    let param_types: Vec<ExprType> = param_types
-                        .into_iter()
-                        .map(|(param_type, _param_name)| param_type.to_owned()) // TODO CLONE
-                        .collect();
-
-                    TypedExpr::FunName(
-                        ExprType::FunctionPointer(param_types, Box::new(return_type.clone())),
-                        fun_name.to_string(),
-                    )
-                }
-
-                None => {
-                    // variables next
-                    match type_bindings.get(&fun_name) {
-                        Some(ExprType::FunctionPointer(arg_types, ret_type)) => TypedExpr::Id(
-                            ExprType::FunctionPointer(arg_types.to_owned(), ret_type.to_owned()),
-                            fun_name.to_string(),
-                        ),
-                        _ => panic!(
-                            "Invalid: Called function {:?}, which doesn't exist",
-                            fun_name
-                        ),
-                    }
-                }
-            },
+            
             Expr::ArrayLookup(arr, ind) => {
                 let typed_arr = arr.typecheck(
                     struct_hm,
@@ -597,6 +603,7 @@ impl Expr {
 
                 TypedExpr::ArrayLookup(elem_type, Box::new(typed_arr), Box::new(typed_ind))
             }
+            
             Expr::ArrayUpdate(arr, ind, new_val) => {
                 let typed_arr = arr.typecheck(
                     struct_hm,
@@ -637,6 +644,7 @@ impl Expr {
                     Box::new(typed_new_val),
                 )
             }
+            
             Expr::ArrayAlloc(elem_t, len) => {
                 validate_type(&elem_t, struct_hm).unwrap();
 
@@ -651,6 +659,7 @@ impl Expr {
 
                 TypedExpr::ArrayAlloc(elem_t, Box::new(parsed_len))
             }
+            
             Expr::ArrayLen(arr) => {
                 let typed_arr = arr.typecheck(
                     struct_hm,
@@ -797,7 +806,13 @@ impl Prog {
 
         let typed_functions = functions
             .into_iter()
-            .map(|f| f.typecheck( struct_type_map.clone(), function_sigs.clone(), &struct_enum_map))
+            .map(|f| {
+                f.typecheck(
+                    struct_type_map.clone(),
+                    function_sigs.clone(),
+                    &struct_enum_map,
+                )
+            })
             .collect();
 
         /* --- Check that no functions have the same name as any struct --- */
